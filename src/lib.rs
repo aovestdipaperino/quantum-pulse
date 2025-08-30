@@ -95,17 +95,14 @@ pub mod collector {
     use super::category::Category;
     use std::collections::HashMap;
 
-    #[derive(Debug, Clone)]
-    #[derive(Default)]
-pub struct OperationStats {
+    #[derive(Debug, Clone, Default)]
+    pub struct OperationStats {
         pub count: u64,
         pub total_micros: u64,
         pub min_micros: u64,
         pub max_micros: u64,
         pub mean_micros: u64,
     }
-
-    
 
     pub struct ProfileCollector;
 
@@ -676,7 +673,7 @@ mod tests {
     fn test_profile_macro() {
         Profiler::<DefaultCategory>::reset();
 
-        let result = profile!("macro_test" => {
+        let result = profile!("macro_test", DefaultCategory::Other => {
             std::thread::sleep(std::time::Duration::from_millis(1));
             100
         });
@@ -690,7 +687,7 @@ mod tests {
         Profiler::<DefaultCategory>::reset();
 
         let should_profile = true;
-        let result = profile_if!(should_profile, "conditional_test" => {
+        let result = profile_if!(should_profile, "conditional_test", DefaultCategory::Other => {
             42
         });
 
@@ -698,7 +695,7 @@ mod tests {
         assert!(Profiler::<DefaultCategory>::get_stats("conditional_test").is_some());
 
         let should_not_profile = false;
-        let result2 = profile_if!(should_not_profile, "conditional_test2" => {
+        let result2 = profile_if!(should_not_profile, "conditional_test2", DefaultCategory::Other => {
             84
         });
 
