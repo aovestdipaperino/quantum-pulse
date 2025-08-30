@@ -1,0 +1,37 @@
+[package]
+name = "quantum-pulse"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A lightweight, customizable profiling library for Rust with support for custom categories and percentile statistics"
+documentation = "https://docs.rs/quantum-pulse"
+repository = "https://github.com/yourusername/quantum-pulse"
+homepage = "https://github.com/yourusername/quantum-pulse"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["profiling", "performance", "metrics", "timing", "statistics"]
+categories = ["development-tools::profiling", "development-tools::debugging"]
+
+[dependencies]
+hdrhistogram = { version = "7.5", optional = true }
+
+[features]
+default = []
+full = ["hdrhistogram"]
+
+[dev-dependencies]
+criterion = "0.5"
+tokio = { version = "1.0", features = ["full"] }
+tokio-stream = "0.1"
+
+[[example]]
+name = "basic"
+
+[[example]]
+name = "custom_categories"
+
+[[example]]
+name = "async_profiling"
+
+[[example]]
+name = "trading_system"
