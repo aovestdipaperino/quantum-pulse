@@ -2,11 +2,11 @@
 name = "quantum-pulse"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Enzo Lombardi <enzinol@gmail.com>"]
 description = "A lightweight, customizable profiling library for Rust with support for custom categories and percentile statistics"
 documentation = "https://docs.rs/quantum-pulse"
-repository = "https://github.com/yourusername/quantum-pulse"
-homepage = "https://github.com/yourusername/quantum-pulse"
+repository = "https://github.com/aovestdipaperino/quantum-pulse"
+homepage = "https://github.com/aovestdipaperino/quantum-pulse"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["profiling", "performance", "metrics", "timing", "statistics"]
