@@ -130,12 +130,6 @@ pub struct NoCategory;
 
 impl Category for NoCategory {}
 
-impl std::fmt::Debug for NoCategory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
 /// Category registry for managing dynamic categories
 pub struct CategoryRegistry<C: Category> {
     categories: Vec<C>,
