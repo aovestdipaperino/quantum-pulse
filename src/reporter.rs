@@ -255,7 +255,7 @@ impl<C: Category> ProfileReport<C> {
         // Format each category
         for category in categories {
             if let Some(operations) = categorized.get(&category) {
-                output.push_str(&format!("\n═══ {} ═══\n", category));
+                output.push_str(&format!("\n═══ {:?} ═══\n", category));
                 if let Some(desc) = category.description() {
                     output.push_str(&format!("  {}\n", desc));
                 }
