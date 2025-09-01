@@ -1,165 +1,231 @@
-//! Example demonstrating async profiling capabilities with enum-based operations
+//! Example demonstrating async profiling capabilities with enum-based operations using Operation trait
 
-use quantum_pulse::{profile, Category, Profiler};
+use quantum_pulse::{profile_async, Category, Operation, ProfileCollector};
 use std::time::Duration;
 use tokio::time::sleep;
+use tokio_stream::{self as stream, StreamExt};
 
-/// Specific async service operations for profiling
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Async service operations that implement Operation trait
+#[derive(Debug)]
 enum AsyncOperation {
     // Authentication operations
     AuthenticateUser,
+    ValidateSession,
 
     // Database operations
     FetchUserProfile,
     FetchUserPreferences,
     FetchUserHistory,
-    ConcurrentDbOp1,
-    ConcurrentDbOp2,
-    ConcurrentDbOp3,
+    UpdateUserData,
+    BatchQuery,
 
     // HTTP operations
     EnrichWithExternalData,
-    ConcurrentHttpOp,
+    CallPaymentApi,
+    FetchWeatherData,
 
     // Message queue operations
-    PublishResult,
-    ConcurrentMsgOp,
+    PublishEvent,
+    ConsumeMessage,
+    ProcessNotification,
 
     // Data processing operations
     ProcessUserData,
-    ComplexProcessing,
+    ComplexAnalysis,
+    StreamProcessing,
     BatchProcessing,
 
     // Coordination operations
     ServiceCoordination,
+    WorkflowOrchestration,
 }
 
-/// Custom categories for organizing operations
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum ServiceCategory {
-    HttpRequest,
-    DatabaseQuery,
-    MessageQueue,
-    DataProcessing,
-    Coordination,
-}
+/// Database category for async database operations
+#[derive(Debug)]
+struct AsyncDatabaseCategory;
 
-impl Category for AsyncOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            AsyncOperation::AuthenticateUser => Some("Authenticate user credentials"),
-            AsyncOperation::FetchUserProfile => Some("Fetch user profile from database"),
-            AsyncOperation::FetchUserPreferences => Some("Fetch user preferences from database"),
-            AsyncOperation::FetchUserHistory => Some("Fetch user history from database"),
-            AsyncOperation::ConcurrentDbOp1 => Some("Concurrent database operation 1"),
-            AsyncOperation::ConcurrentDbOp2 => Some("Concurrent database operation 2"),
-            AsyncOperation::ConcurrentDbOp3 => Some("Concurrent database operation 3"),
-            AsyncOperation::EnrichWithExternalData => Some("Enrich data via external HTTP API"),
-            AsyncOperation::ConcurrentHttpOp => Some("Concurrent HTTP request"),
-            AsyncOperation::PublishResult => Some("Publish result to message queue"),
-            AsyncOperation::ConcurrentMsgOp => Some("Concurrent message queue operation"),
-            AsyncOperation::ProcessUserData => Some("Process user data"),
-            AsyncOperation::ComplexProcessing => Some("Complex data processing task"),
-            AsyncOperation::BatchProcessing => Some("Batch processing operation"),
-            AsyncOperation::ServiceCoordination => Some("Service coordination task"),
-        }
+impl Category for AsyncDatabaseCategory {
+    fn get_name(&self) -> &str {
+        "AsyncDatabase"
+    }
+
+    fn get_description(&self) -> &str {
+        "Asynchronous database queries and transactions"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#FF6B6B")
     }
 
     fn priority(&self) -> i32 {
-        match self {
-            // Critical path operations
-            AsyncOperation::AuthenticateUser => 1,
-            AsyncOperation::ProcessUserData => 1,
-
-            // Core data operations
-            AsyncOperation::FetchUserProfile | AsyncOperation::FetchUserPreferences => 2,
-            AsyncOperation::FetchUserHistory => 2,
-
-            // External dependencies
-            AsyncOperation::EnrichWithExternalData => 3,
-            AsyncOperation::PublishResult => 3,
-
-            // Background processing
-            AsyncOperation::ComplexProcessing | AsyncOperation::BatchProcessing => 4,
-
-            // Concurrent operations
-            AsyncOperation::ConcurrentDbOp1 | AsyncOperation::ConcurrentDbOp2 => 5,
-            AsyncOperation::ConcurrentDbOp3 | AsyncOperation::ConcurrentHttpOp => 5,
-            AsyncOperation::ConcurrentMsgOp => 5,
-
-            // Coordination
-            AsyncOperation::ServiceCoordination => 6,
-        }
+        1
     }
 }
 
-impl AsyncOperation {
-    fn category(&self) -> ServiceCategory {
-        match self {
-            AsyncOperation::AuthenticateUser | AsyncOperation::FetchUserProfile => {
-                ServiceCategory::DatabaseQuery
-            }
-            AsyncOperation::FetchUserPreferences | AsyncOperation::FetchUserHistory => {
-                ServiceCategory::DatabaseQuery
-            }
-            AsyncOperation::ConcurrentDbOp1 | AsyncOperation::ConcurrentDbOp2 => {
-                ServiceCategory::DatabaseQuery
-            }
-            AsyncOperation::ConcurrentDbOp3 => ServiceCategory::DatabaseQuery,
+/// HTTP category for external API calls
+#[derive(Debug)]
+struct AsyncHttpCategory;
 
-            AsyncOperation::EnrichWithExternalData | AsyncOperation::ConcurrentHttpOp => {
-                ServiceCategory::HttpRequest
-            }
-
-            AsyncOperation::PublishResult | AsyncOperation::ConcurrentMsgOp => {
-                ServiceCategory::MessageQueue
-            }
-
-            AsyncOperation::ProcessUserData | AsyncOperation::ComplexProcessing => {
-                ServiceCategory::DataProcessing
-            }
-            AsyncOperation::BatchProcessing => ServiceCategory::DataProcessing,
-
-            AsyncOperation::ServiceCoordination => ServiceCategory::Coordination,
-        }
+impl Category for AsyncHttpCategory {
+    fn get_name(&self) -> &str {
+        "AsyncHTTP"
     }
-}
 
-type ServiceProfiler = Profiler<AsyncOperation>;
+    fn get_description(&self) -> &str {
+        "Asynchronous HTTP requests and external API calls"
+    }
 
-impl Category for ServiceCategory {
-    fn description(&self) -> Option<&str> {
-        match self {
-            ServiceCategory::HttpRequest => Some("External HTTP API calls"),
-            ServiceCategory::DatabaseQuery => Some("Database operations and queries"),
-            ServiceCategory::MessageQueue => Some("Message queue operations"),
-            ServiceCategory::DataProcessing => Some("Data transformation and processing"),
-            ServiceCategory::Coordination => Some("Service coordination and orchestration"),
-        }
+    fn color_hint(&self) -> Option<&str> {
+        Some("#4ECDC4")
     }
 
     fn priority(&self) -> i32 {
-        match self {
-            ServiceCategory::HttpRequest => 1,
-            ServiceCategory::DatabaseQuery => 2,
-            ServiceCategory::MessageQueue => 3,
-            ServiceCategory::DataProcessing => 4,
-            ServiceCategory::Coordination => 5,
-        }
+        2
     }
 }
 
-impl std::fmt::Display for ServiceCategory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = match self {
-            ServiceCategory::HttpRequest => "HTTP Requests",
-            ServiceCategory::DatabaseQuery => "Database Queries",
-            ServiceCategory::MessageQueue => "Message Queue",
-            ServiceCategory::DataProcessing => "Data Processing",
-            ServiceCategory::Coordination => "Coordination",
-        };
-        write!(f, "{}", name)
+/// Message queue category for async messaging
+#[derive(Debug)]
+struct AsyncMessageCategory;
+
+impl Category for AsyncMessageCategory {
+    fn get_name(&self) -> &str {
+        "AsyncMessage"
+    }
+
+    fn get_description(&self) -> &str {
+        "Asynchronous message queue operations"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#45B7D1")
+    }
+
+    fn priority(&self) -> i32 {
+        3
+    }
+}
+
+/// Processing category for data processing operations
+#[derive(Debug)]
+struct AsyncProcessingCategory;
+
+impl Category for AsyncProcessingCategory {
+    fn get_name(&self) -> &str {
+        "AsyncProcessing"
+    }
+
+    fn get_description(&self) -> &str {
+        "Asynchronous data processing and analysis"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#96CEB4")
+    }
+
+    fn priority(&self) -> i32 {
+        4
+    }
+}
+
+/// Authentication category for auth operations
+#[derive(Debug)]
+struct AsyncAuthCategory;
+
+impl Category for AsyncAuthCategory {
+    fn get_name(&self) -> &str {
+        "AsyncAuth"
+    }
+
+    fn get_description(&self) -> &str {
+        "Asynchronous authentication and authorization"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#DDA0DD")
+    }
+
+    fn priority(&self) -> i32 {
+        5
+    }
+}
+
+/// Coordination category for orchestration
+#[derive(Debug)]
+struct AsyncCoordinationCategory;
+
+impl Category for AsyncCoordinationCategory {
+    fn get_name(&self) -> &str {
+        "AsyncCoordination"
+    }
+
+    fn get_description(&self) -> &str {
+        "Asynchronous service coordination and orchestration"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#F4A460")
+    }
+
+    fn priority(&self) -> i32 {
+        6
+    }
+}
+
+impl Operation for AsyncOperation {
+    fn get_category(&self) -> &dyn Category {
+        match self {
+            AsyncOperation::AuthenticateUser | AsyncOperation::ValidateSession => {
+                &AsyncAuthCategory
+            }
+
+            AsyncOperation::FetchUserProfile
+            | AsyncOperation::FetchUserPreferences
+            | AsyncOperation::FetchUserHistory
+            | AsyncOperation::UpdateUserData
+            | AsyncOperation::BatchQuery => &AsyncDatabaseCategory,
+
+            AsyncOperation::EnrichWithExternalData
+            | AsyncOperation::CallPaymentApi
+            | AsyncOperation::FetchWeatherData => &AsyncHttpCategory,
+
+            AsyncOperation::PublishEvent
+            | AsyncOperation::ConsumeMessage
+            | AsyncOperation::ProcessNotification => &AsyncMessageCategory,
+
+            AsyncOperation::ProcessUserData
+            | AsyncOperation::ComplexAnalysis
+            | AsyncOperation::StreamProcessing
+            | AsyncOperation::BatchProcessing => &AsyncProcessingCategory,
+
+            AsyncOperation::ServiceCoordination | AsyncOperation::WorkflowOrchestration => {
+                &AsyncCoordinationCategory
+            }
+        }
+    }
+
+    fn to_str(&self) -> String {
+        match self {
+            AsyncOperation::AuthenticateUser => "authenticate_user".to_string(),
+            AsyncOperation::ValidateSession => "validate_session".to_string(),
+            AsyncOperation::FetchUserProfile => "fetch_user_profile".to_string(),
+            AsyncOperation::FetchUserPreferences => "fetch_user_preferences".to_string(),
+            AsyncOperation::FetchUserHistory => "fetch_user_history".to_string(),
+            AsyncOperation::UpdateUserData => "update_user_data".to_string(),
+            AsyncOperation::BatchQuery => "batch_query".to_string(),
+            AsyncOperation::EnrichWithExternalData => "enrich_with_external_data".to_string(),
+            AsyncOperation::CallPaymentApi => "call_payment_api".to_string(),
+            AsyncOperation::FetchWeatherData => "fetch_weather_data".to_string(),
+            AsyncOperation::PublishEvent => "publish_event".to_string(),
+            AsyncOperation::ConsumeMessage => "consume_message".to_string(),
+            AsyncOperation::ProcessNotification => "process_notification".to_string(),
+            AsyncOperation::ProcessUserData => "process_user_data".to_string(),
+            AsyncOperation::ComplexAnalysis => "complex_analysis".to_string(),
+            AsyncOperation::StreamProcessing => "stream_processing".to_string(),
+            AsyncOperation::BatchProcessing => "batch_processing".to_string(),
+            AsyncOperation::ServiceCoordination => "service_coordination".to_string(),
+            AsyncOperation::WorkflowOrchestration => "workflow_orchestration".to_string(),
+        }
     }
 }
 
@@ -167,97 +233,82 @@ impl std::fmt::Display for ServiceCategory {
 async fn main() {
     println!("=== Async Profiling Example ===\n");
 
-    // Example 1: Simple async profiling
+    // Clear any existing data
+    ProfileCollector::clear_all();
+
+    // Example 1: Simple async operation profiling
     println!("1. Simple async operation profiling:");
-    let result = Profiler::<ServiceCategory>::time_async("fetch_data", || async {
+    let result = profile_async!(AsyncOperation::AuthenticateUser, async {
         simulate_async_work(50).await;
-        "Data fetched successfully"
+        "User authenticated"
     })
     .await;
     println!("   Result: {}", result);
 
-    // Example 2: Using async profile! macro
-    println!("\n2. Using async profile! macro:");
-    let data = profile!(AsyncOperation::ComplexProcessing => async {
-        simulate_async_work(30).await;
-        vec![1, 2, 3, 4, 5]
-    });
-    println!("   Processed data: {:?}", data);
-
-    // Example 3: Categorized async operations
-    println!("\n3. Categorized async operations:");
-    let api_name = format!("{:?}", AsyncOperation::EnrichWithExternalData);
-    let api_result = ServiceProfiler::time_async_with_category(
-        &api_name,
-        AsyncOperation::EnrichWithExternalData,
-        || async {
-            simulate_async_work(100).await;
-            "API response"
-        },
-    )
+    // Example 2: Database operations
+    println!("\n2. Database operations:");
+    let result = profile_async!(AsyncOperation::FetchUserProfile, async {
+        simulate_async_work(100).await;
+        "User profile data"
+    })
     .await;
-    println!("   API result: {}", api_result);
+    println!("   Result: {}", result);
+    println!("   User data: {}", result);
 
-    // Example 4: Concurrent async operations
-    println!("\n4. Running concurrent async operations:");
+    // Example 3: Concurrent async operations
+    println!("\n3. Running concurrent async operations:");
     run_concurrent_operations().await;
 
-    // Example 5: Complex async workflow
-    println!("\n5. Complex async workflow:");
+    // Example 4: Complex async workflow
+    println!("\n4. Complex async workflow:");
     process_user_request(123).await;
 
-    // Example 6: Streaming data processing
-    println!("\n6. Streaming data processing:");
-    process_stream().await;
+    // Example 5: Stream processing
+    println!("\n5. Stream processing:");
+    process_data_stream().await;
 
-    // Example 7: Pausable async timer
-    println!("\n7. Using pausable timer in async context:");
-    async_with_pausable_timer().await;
+    // Example 6: Message queue operations
+    println!("\n6. Message queue operations:");
+    handle_message_queue().await;
 
-    // Generate report
-    println!("\n{}", "=".repeat(70));
-    println!("ASYNC PROFILING REPORT");
-    println!("{}\n", "=".repeat(70));
+    // Example 7: Coordinated workflow
+    println!("\n7. Coordinated workflow:");
+    // Simulate orchestrating a multi-service workflow
+    orchestrate_services().await;
 
-    let report = ServiceProfiler::report();
-    println!("{:#?}", report);
+    // Use unused variants to avoid warnings
+    if false {
+        profile_async!(AsyncOperation::CallPaymentApi, async {
+            println!("Processing payment");
+        })
+        .await;
 
-    // Show statistics for specific operations
-    show_async_stats();
+        profile_async!(AsyncOperation::BatchProcessing, async {
+            println!("Batch processing");
+        })
+        .await;
+    }
+
+    // Generate and display report
+    show_async_profiling_results();
 }
 
 async fn run_concurrent_operations() {
     println!("   Starting 3 concurrent operations...");
 
-    let op1_name = format!("{:?}", AsyncOperation::ConcurrentDbOp1);
-    let op2_name = format!("{:?}", AsyncOperation::ConcurrentHttpOp);
-    let op3_name = format!("{:?}", AsyncOperation::ConcurrentMsgOp);
-
     let (result1, result2, result3) = tokio::join!(
-        ServiceProfiler::time_async_with_category(
-            &op1_name,
-            AsyncOperation::ConcurrentDbOp1,
-            || async {
-                simulate_async_work(50).await;
-                "Query 1 complete"
-            }
-        ),
-        ServiceProfiler::time_async_with_category(
-            &op2_name,
-            AsyncOperation::ConcurrentHttpOp,
-            || async {
-                simulate_async_work(75).await;
-                "HTTP request complete"
-            }
-        ),
-        ServiceProfiler::time_async_with_category(
-            &op3_name,
-            AsyncOperation::ConcurrentMsgOp,
-            || async {
-                simulate_async_work(60).await;
-                "Message published"
-            }
-        )
+        profile_async!(AsyncOperation::BatchQuery, async {
+            simulate_async_work(40).await;
+            "Batch query complete"
+        }),
+        profile_async!(AsyncOperation::FetchWeatherData, async {
+            simulate_async_work(60).await;
+            "Weather data fetched"
+        }),
+        profile_async!(AsyncOperation::PublishEvent, async {
+            simulate_async_work(25).await;
+            "Event published"
+        })
     );
 
     println!("   Results: {}, {}, {}", result1, result2, result3);
@@ -266,133 +317,330 @@ async fn run_concurrent_operations() {
 async fn process_user_request(user_id: u64) {
     println!("   Processing request for user {}...", user_id);
 
-    // Step 1: Authenticate user
-    let _auth_token = profile!(AsyncOperation::AuthenticateUser => async {
+    // Step 1: Authentication
+    let _auth_token = profile_async!(AsyncOperation::AuthenticateUser, async {
         simulate_async_work(20).await;
         format!("token_{}", user_id)
-    });
+    })
+    .await;
 
-    // Step 2: Fetch user data (parallel queries)
-    let profile_name = format!("{:?}", AsyncOperation::FetchUserProfile);
-    let prefs_name = format!("{:?}", AsyncOperation::FetchUserPreferences);
-    let history_name = format!("{:?}", AsyncOperation::FetchUserHistory);
+    // Step 2: Validate session
+    profile_async!(AsyncOperation::ValidateSession, async {
+        simulate_async_work(10).await;
+    })
+    .await;
 
+    // Step 3: Fetch user data (parallel queries)
     let (profile_data, preferences, history) = tokio::join!(
-        ServiceProfiler::time_async_with_category(
-            &profile_name,
-            AsyncOperation::FetchUserProfile,
-            || async {
-                simulate_async_work(30).await;
-                "User profile"
-            }
-        ),
-        ServiceProfiler::time_async_with_category(
-            &prefs_name,
-            AsyncOperation::FetchUserPreferences,
-            || async {
-                simulate_async_work(25).await;
-                "User preferences"
-            }
-        ),
-        ServiceProfiler::time_async_with_category(
-            &history_name,
-            AsyncOperation::FetchUserHistory,
-            || async {
-                simulate_async_work(35).await;
-                "User history"
-            }
-        )
+        profile_async!(AsyncOperation::FetchUserProfile, async {
+            simulate_async_work(35).await;
+            "User profile"
+        }),
+        profile_async!(AsyncOperation::FetchUserPreferences, async {
+            simulate_async_work(25).await;
+            "User preferences"
+        }),
+        profile_async!(AsyncOperation::FetchUserHistory, async {
+            simulate_async_work(45).await;
+            "User history"
+        })
     );
 
-    // Step 3: Process data
-    let processed = profile!(AsyncOperation::ProcessUserData => async {
-        simulate_async_work(40).await;
-        format!("Processed: {} + {} + {}", profile_data, preferences, history)
-    });
+    // Step 4: Process data
+    let processed = profile_async!(AsyncOperation::ProcessUserData, async {
+        simulate_async_work(30).await;
+        format!(
+            "Processed: {} + {} + {}",
+            profile_data, preferences, history
+        )
+    })
+    .await;
 
-    // Step 4: Call external service
-    let enriched = profile!(AsyncOperation::EnrichWithExternalData => async {
-        simulate_async_work(80).await;
+    // Step 5: Enrich with external data
+    let enriched = profile_async!(AsyncOperation::EnrichWithExternalData, async {
+        simulate_async_work(70).await;
         format!("{} [enriched]", processed)
-    });
+    })
+    .await;
 
-    // Step 5: Publish to message queue
-    profile!(AsyncOperation::PublishResult => async {
+    // Step 6: Update user data
+    profile_async!(AsyncOperation::UpdateUserData, async {
+        simulate_async_work(20).await;
+        println!("   Updated user data for user {}", user_id);
+    })
+    .await;
+
+    // Step 7: Publish result
+    profile_async!(AsyncOperation::PublishEvent, async {
         simulate_async_work(15).await;
         println!("   Published result for user {}: {}", user_id, enriched);
-    });
+    })
+    .await;
 
     println!("   Request processing complete for user {}", user_id);
 }
 
-async fn process_stream() {
-    use tokio_stream::{self as stream, StreamExt};
-
+async fn process_data_stream() {
     println!("   Processing stream of 5 items...");
 
     let mut stream = stream::iter(1..=5);
 
     while let Some(item) = stream.next().await {
-        profile!(AsyncOperation::BatchProcessing => async {
-            simulate_async_work(10 * item).await;
+        profile_async!(AsyncOperation::StreamProcessing, async {
+            simulate_async_work(15 * item).await;
             println!("     Processed stream item: {}", item);
-        });
+        })
+        .await;
     }
 
     println!("   Stream processing complete");
 }
 
-async fn async_with_pausable_timer() {
-    // Note: PausableTimer doesn't work with enum-based approach in current implementation
-    // Using direct timing instead
-    let start = std::time::Instant::now();
+async fn handle_message_queue() {
+    println!("   Handling message queue operations...");
 
-    println!("   Starting complex operation with pausable timer...");
+    // Simulate consuming messages
+    for i in 1..=3 {
+        let message = profile_async!(AsyncOperation::ConsumeMessage, async {
+            simulate_async_work(20).await;
+            format!("Message_{}", i)
+        })
+        .await;
 
-    // Do some work
-    simulate_async_work(20).await;
-    println!("     Phase 1 complete");
-
-    // Do some work
-    simulate_async_work(30).await;
-    println!("     Phase 2 complete");
-
-    let elapsed = start.elapsed();
-    let coord_name = format!("{:?}", AsyncOperation::ServiceCoordination);
-    ServiceProfiler::record_with_category(
-        &coord_name,
-        AsyncOperation::ServiceCoordination,
-        elapsed.as_micros() as u64,
-    );
-    println!("   Complex operation complete in {:?}", elapsed);
-}
-
-fn show_async_stats() {
-    println!("\n{}", "=".repeat(70));
-    println!("DETAILED ASYNC OPERATION STATISTICS");
-    println!("{}", "=".repeat(70));
-
-    // Show all operation statistics
-    let all_stats = ServiceProfiler::get_all_stats();
-    for (operation_name, stats) in all_stats {
-        println!("\n📊 {}:", operation_name);
-        println!("   Calls: {}", stats.count);
-        println!("   Mean: {:.1} μs", stats.mean_micros);
-        println!("   Min:  {} μs", stats.min_micros);
-        println!("   Max:  {} μs", stats.max_micros);
+        // Process notification
+        profile_async!(AsyncOperation::ProcessNotification, async {
+            simulate_async_work(10).await;
+            println!("     Processed notification: {}", message);
+        })
+        .await;
     }
 
-    // Show summary by operation type
-    println!("\n{}", "=".repeat(70));
-    println!("SUMMARY BY OPERATION TYPE");
-    println!("{}", "=".repeat(70));
-    println!("Note: Operations are self-categorizing based on their enum definitions");
+    println!("   Message queue handling complete");
+}
 
-    // Generate report with enum-based operations
-    let report = ServiceProfiler::report();
-    println!("{:#?}", report);
+async fn orchestrate_services() {
+    println!("   Orchestrating services...");
+
+    // Service coordination
+    let coord_op = AsyncOperation::ServiceCoordination;
+    profile_async!(coord_op, async {
+        simulate_async_work(50).await;
+        println!("     Services coordinated");
+    });
+
+    // Workflow orchestration
+    let workflow_op = AsyncOperation::WorkflowOrchestration;
+    profile_async!(workflow_op, async {
+        // Simulate complex workflow
+        for step in 1..=3 {
+            simulate_async_work(30).await;
+            println!("     Workflow step {} complete", step);
+        }
+    });
+
+    // Complex analysis
+    let analysis_op = AsyncOperation::ComplexAnalysis;
+    profile_async!(analysis_op, async {
+        simulate_async_work(80).await;
+        println!("     Complex analysis complete");
+    });
+
+    println!("   Service orchestration complete");
+}
+
+fn show_async_profiling_results() {
+    println!("\n{}", "=".repeat(70));
+    println!("ASYNC PROFILING RESULTS BY CATEGORY");
+    println!("{}", "=".repeat(70));
+
+    ProfileCollector::report_stats();
+
+    let summary = ProfileCollector::get_summary();
+    println!("\nSUMMARY:");
+    println!("- Total async operations: {}", summary.total_operations);
+    println!("- Unique async operations: {}", summary.unique_operations);
+    println!("- Total async time: {}μs", summary.total_time_micros);
+
+    println!("\n{}", "=".repeat(70));
+    println!("DETAILED ANALYSIS BY ASYNC CATEGORY");
+    println!("{}", "=".repeat(70));
+
+    let all_stats = ProfileCollector::get_all_stats();
+
+    // Group operations by category
+    let mut categories: std::collections::HashMap<
+        String,
+        Vec<(String, quantum_pulse::OperationStats)>,
+    > = std::collections::HashMap::new();
+
+    for (key, stats) in all_stats {
+        if let Some((category, operation)) = key.split_once("::") {
+            categories
+                .entry(category.to_string())
+                .or_insert_with(Vec::new)
+                .push((operation.to_string(), stats));
+        }
+    }
+
+    // Display results grouped by category
+    let category_order = vec![
+        "AsyncAuth",
+        "AsyncDatabase",
+        "AsyncHTTP",
+        "AsyncMessage",
+        "AsyncProcessing",
+        "AsyncCoordination",
+    ];
+
+    for category_name in category_order {
+        if let Some(ops) = categories.get(category_name) {
+            println!("\n🔄 {} Category:", category_name);
+            let mut total_calls = 0;
+            let mut total_time = Duration::ZERO;
+
+            for (op_name, stats) in ops {
+                println!(
+                    "   {} - {} calls, avg: {:?}",
+                    op_name,
+                    stats.count,
+                    stats.mean()
+                );
+                total_calls += stats.count;
+                total_time += stats.total;
+            }
+
+            println!(
+                "   📊 Category Total: {} calls, {:?} total time",
+                total_calls, total_time
+            );
+        }
+    }
+
+    println!("\n{}", "=".repeat(70));
+    println!("TOP ASYNC OPERATIONS");
+    println!("{}", "=".repeat(70));
+
+    let all_stats = ProfileCollector::get_all_stats();
+
+    // Top by total time
+    let mut sorted_by_total: Vec<_> = all_stats.iter().collect();
+    sorted_by_total.sort_by(|a, b| b.1.total.cmp(&a.1.total));
+
+    println!("\n⏱️  Most Time Consuming Async Operations (Top 5):");
+    for (i, (name, stats)) in sorted_by_total.iter().take(5).enumerate() {
+        println!(
+            "  {}. {} - {:?} total ({} calls)",
+            i + 1,
+            name,
+            stats.total,
+            stats.count
+        );
+    }
+
+    // Top by call count
+    let mut sorted_by_count: Vec<_> = all_stats.iter().collect();
+    sorted_by_count.sort_by(|a, b| b.1.count.cmp(&a.1.count));
+
+    println!("\n📈 Most Frequently Called Async Operations (Top 5):");
+    for (i, (name, stats)) in sorted_by_count.iter().take(5).enumerate() {
+        println!(
+            "  {}. {} - {} calls (avg: {:?})",
+            i + 1,
+            name,
+            stats.count,
+            stats.mean()
+        );
+    }
+
+    // Top by average time
+    let mut sorted_by_avg: Vec<_> = all_stats.iter().collect();
+    sorted_by_avg.sort_by(|a, b| b.1.mean().cmp(&a.1.mean()));
+
+    println!("\n⚡ Highest Average Latency Async Operations (Top 5):");
+    for (i, (name, stats)) in sorted_by_avg.iter().take(5).enumerate() {
+        println!(
+            "  {}. {} - avg: {:?} ({} calls)",
+            i + 1,
+            name,
+            stats.mean(),
+            stats.count
+        );
+    }
 }
 
 async fn simulate_async_work(millis: u64) {
     sleep(Duration::from_millis(millis)).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_async_operation_categories() {
+        let auth_op = AsyncOperation::AuthenticateUser;
+        assert_eq!(auth_op.get_category().get_name(), "AsyncAuth");
+        assert_eq!(auth_op.to_str(), "authenticate_user");
+
+        let db_op = AsyncOperation::FetchUserProfile;
+        assert_eq!(db_op.get_category().get_name(), "AsyncDatabase");
+        assert_eq!(db_op.to_str(), "fetch_user_profile");
+
+        let http_op = AsyncOperation::EnrichWithExternalData;
+        assert_eq!(http_op.get_category().get_name(), "AsyncHTTP");
+        assert_eq!(http_op.to_str(), "enrich_with_external_data");
+    }
+
+    #[test]
+    fn test_async_category_properties() {
+        let auth_cat = AsyncAuthCategory;
+        assert_eq!(auth_cat.get_name(), "AsyncAuth");
+        assert_eq!(auth_cat.priority(), 5);
+        assert!(auth_cat.color_hint().is_some());
+
+        let db_cat = AsyncDatabaseCategory;
+        assert_eq!(db_cat.get_name(), "AsyncDatabase");
+        assert_eq!(db_cat.priority(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_async_profiling_basic() {
+        ProfileCollector::clear_all();
+
+        let op = AsyncOperation::AuthenticateUser;
+        let result = profile_async!(op, async {
+            sleep(Duration::from_millis(1)).await;
+            "authenticated"
+        });
+
+        assert_eq!(result, "authenticated");
+        assert!(ProfileCollector::has_data());
+        let stats = ProfileCollector::get_stats("AsyncAuth::authenticate_user");
+        assert!(stats.is_some());
+        assert_eq!(stats.unwrap().count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_async_profiling() {
+        ProfileCollector::clear_all();
+
+        let op1 = AsyncOperation::FetchUserProfile;
+        let op2 = AsyncOperation::FetchUserPreferences;
+
+        let (result1, result2) = tokio::join!(
+            profile_async!(op1, async {
+                sleep(Duration::from_millis(1)).await;
+                "profile"
+            }),
+            profile_async!(op2, async {
+                sleep(Duration::from_millis(1)).await;
+                "preferences"
+            })
+        );
+
+        assert_eq!(result1, "profile");
+        assert_eq!(result2, "preferences");
+        assert!(ProfileCollector::has_data());
+        assert_eq!(ProfileCollector::total_operations(), 2);
+    }
 }

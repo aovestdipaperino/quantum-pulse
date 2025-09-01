@@ -45,43 +45,42 @@ profiling = ["quantum-pulse/full"]
 ### Basic Usage
 
 ```rust
-use quantum_pulse::{Profiler, Category, profile};
+use quantum_pulse::{profile, Category, Operation, ProfileCollector};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// Define your operations enum
+#[derive(Debug)]
 enum AppOperation {
     DatabaseQuery,
     DataProcessing,
     NetworkRequest,
 }
 
-impl Category for AppOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            AppOperation::DatabaseQuery => Some("Database operations"),
-            AppOperation::DataProcessing => Some("Data processing tasks"),
-            AppOperation::NetworkRequest => Some("Network I/O operations"),
-        }
+// Implement the Operation trait
+impl Operation for AppOperation {
+    fn to_str(&self) -> String {
+        // Optional: customize the string representation
+        format!("{:?}", self)
+    }
+
+    fn get_category(&self) -> &dyn Category {
+        // Optional: provide a category implementation
+        &quantum_pulse::NoCategory
     }
 }
 
-type AppProfiler = Profiler<AppOperation>;
-
 fn main() {
-    // Type-safe timing with enum-based macro
-    let result = profile!(AppOperation::DatabaseQuery => {
+    // Profile operations directly with enums
+    let result = profile!(AppOperation::DatabaseQuery, {
         expensive_database_operation()
     });
 
-    // Using the Profiler directly with categories
-    let data = AppProfiler::time_with_category(
-        &format!("{:?}", AppOperation::DataProcessing),
-        AppOperation::DataProcessing,
-        || process_large_dataset()
-    );
+    // Profile another operation
+    let data = profile!(AppOperation::DataProcessing, {
+        process_large_dataset()
+    });
 
     // Generate a report
-    let report = AppProfiler::report();
-    println!("{:#?}", report);
+    println!("{:#?}", ProfileCollector::generate_report());
 }
 ```
 
@@ -150,36 +149,28 @@ async fn handle_request(user_id: u64) -> Response {
 ### Async Support
 
 ```rust
-use quantum_pulse::{Profiler, Category, profile};
+use quantum_pulse::{profile_async, Operation};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 enum AsyncOperation {
     HttpRequest,
     DatabaseQuery,
     ProcessData,
 }
 
-impl Category for AsyncOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            AsyncOperation::HttpRequest => Some("HTTP API calls"),
-            AsyncOperation::DatabaseQuery => Some("Database operations"),
-            AsyncOperation::ProcessData => Some("Data processing"),
-        }
-    }
-}
+impl Operation for AsyncOperation {}
 
 async fn fetch_data() -> Result<Data, Error> {
     // Profile async operations with enums
-    profile!(AsyncOperation::HttpRequest => async {
+    profile_async!(AsyncOperation::HttpRequest, async {
         client.get("https://api.example.com/data").await
-    })
+    }).await
 }
 
 async fn main() {
-    let data = profile!(AsyncOperation::ProcessData => async {
+    let data = profile_async!(AsyncOperation::ProcessData, async {
         fetch_data().await
-    });
+    }).await;
 }
 ```
 
@@ -328,59 +319,71 @@ std::fs::write("profile_report.csv", csv_content).unwrap();
 ```
 
 ### Operation Categories
+### Type-Safe Operations with Categories
 
 Define operation categories with metadata for better organization:
 
 ```rust
-use quantum_pulse::{Category, profile};
+use quantum_pulse::{Category, Operation, profile};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// Define critical operations
+#[derive(Debug)]
 enum CriticalOperation {
     ApiRequest,
     DatabaseTransaction,
     UserAuthentication,
 }
 
-impl Category for CriticalOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            CriticalOperation::ApiRequest => Some("External API call duration"),
-            CriticalOperation::DatabaseTransaction => Some("Database transaction processing"),
-            CriticalOperation::UserAuthentication => Some("User login and token validation"),
-        }
+// Custom category for critical path
+#[derive(Debug)]
+struct CriticalCategory;
+
+impl Category for CriticalCategory {
+    fn get_name(&self) -> &str {
+        "Critical"
+    }
+
+    fn get_description(&self) -> &str {
+        "Operations on the critical path"
     }
 
     fn priority(&self) -> i32 {
-        match self {
-            CriticalOperation::UserAuthentication => 1, // Highest priority
-            CriticalOperation::DatabaseTransaction => 2,
-            CriticalOperation::ApiRequest => 3,
-        }
+        1  // High priority
+    }
+}
+
+impl Operation for CriticalOperation {
+    fn to_str(&self) -> String {
+        format!("{:?}", self)
+    }
+
+    fn get_category(&self) -> &dyn Category {
+        &CriticalCategory
     }
 }
 
 // Use type-safe operations for consistent profiling
-let result = profile!(CriticalOperation::ApiRequest => {
+let result = profile!(CriticalOperation::ApiRequest, {
     make_api_call()
 });
 ```
 
-## Zero-Cost Abstractions
+### Zero-Cost Abstractions
 
 Quantum Pulse implements true zero-cost abstractions through its innovative stub feature system:
 
 ### How It Works
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 enum AppOperation {
     DatabaseQuery,
 }
 
-impl Category for AppOperation {}
+impl Operation for AppOperation {}
 
 // Your code always looks the same
-let result = profile!(AppOperation::DatabaseQuery => {
+let result = profile!(AppOperation::DatabaseQuery, {
     expensive_operation()
 });
 
@@ -483,14 +486,14 @@ timer.stop();
 
 ### After (with Quantum Pulse and type-safe enums)
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 enum AppOperation {
     WorkOperation,
 }
 
-impl Category for AppOperation {}
+impl Operation for AppOperation {}
 
-let result = profile!(AppOperation::WorkOperation => {
+let result = profile!(AppOperation::WorkOperation, {
     do_work()
 });
 ```

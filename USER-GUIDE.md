@@ -109,21 +109,23 @@ Quantum Pulse takes a radically different approach:
 // THIS is the Quantum Pulse way - Type-safe and maintainable
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum TradingOperation {
-    // Order Management
+    // Market operations
     OrderValidation,
-    RiskAssessment,
+    RiskAssessment, 
     OrderExecution,
     
-    // Market Data
+    // Analytics operations
     PriceDataLookup,
     VolatilityCalculation,
     MarketDepthAnalysis,
     
-    // Portfolio Management
+    // Post-trade operations
     PositionUpdate,
     PnlCalculation,
     ExposureCheck,
 }
+
+impl Operation for TradingOperation {}
 
 impl Category for TradingOperation {
     fn description(&self) -> Option<&str> {
@@ -175,7 +177,7 @@ use quantum_pulse::{Category, profile};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum WebServerOperation {
-    // Request lifecycle
+    // Request handling
     RequestParsing,
     Authentication,
     Authorization,
@@ -191,10 +193,13 @@ enum WebServerOperation {
     PaymentApiCall,
     EmailServiceCall,
     
-    // Background tasks
+    // Maintenance
     SessionCleanup,
     MetricsAggregation,
 }
+
+// Basic implementation of Operation trait
+impl Operation for WebServerOperation {}
 
 impl Category for WebServerOperation {
     fn description(&self) -> Option<&str> {
@@ -310,8 +315,8 @@ async fn process_price_update(price_feed: PriceFeed) -> Result<(), TradingError>
         parse_price_feed(price_feed)?
     });
     
-    let opportunities = profile!(ArbitrageOperation::ArbitrageDetection => {
-        detect_arbitrage_opportunities(&prices)
+    let opportunities = profile!(ArbitrageOperation::ArbitrageDetection, {
+        detect_arbitrage_opportunities(result)
     });
     
     for opportunity in opportunities {
@@ -636,9 +641,9 @@ async fn create_order(
     };
     
     // Check inventory for all items
-    let inventory_check = profile!(EcommerceOperation::InventoryCheck => async {
-        check_inventory_parallel(&cart.items).await?
-    });
+    let inventory_results = profile_async!(EcommerceOperation::InventoryCheck, async {
+        check_inventory_availability(&cart.items).await?
+    }).await;
     
     // Calculate final pricing (including taxes, discounts, etc.)
     let pricing = profile!(EcommerceOperation::PricingCalculation => {
@@ -976,9 +981,9 @@ enum AsyncOperation {
 
 // Good: Profile the entire async operation
 async fn fetch_user_data(user_id: u64) -> Result<UserData, Error> {
-    profile!(AsyncOperation::HttpRequest => async {
-        http_client.get(&format!("/users/{}", user_id)).await
-    })
+    profile_async!(AsyncOperation::HttpRequest, async {
+        client.get(&format!("https://api.example.com/users/{}", user_id)).await
+    }).await
 }
 
 // Better: Profile active processing time only
@@ -1365,10 +1370,12 @@ enum UserOperation {
     TokenRefresh,
 }
 
-profile!(UserOperation::Authentication => { authenticate() });
-profile!(UserOperation::PermissionCheck => { check_permissions() });
-profile!(UserOperation::SessionValidation => { validate_session() });
-profile!(UserOperation::TokenRefresh => { refresh_token() });
+impl Operation for UserOperation {}
+
+profile!(UserOperation::Authentication, { authenticate() });
+profile!(UserOperation::PermissionCheck, { check_permissions() });
+profile!(UserOperation::SessionValidation, { validate_session() });
+profile!(UserOperation::TokenRefresh, { refresh_token() });
 ```
 
 ### Diagnostic Techniques

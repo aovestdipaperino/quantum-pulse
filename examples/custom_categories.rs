@@ -1,17 +1,20 @@
-//! Example demonstrating custom categories for organizing profiling data
+//! Example demonstrating custom categories with enum operations using Operation trait
 
-use quantum_pulse::{profile, Category, ProfileReport, Profiler, ReportBuilder};
+use quantum_pulse::{profile, profile_async, Category, Operation, ProfileCollector};
 use std::thread;
 use std::time::Duration;
+use tokio::time::sleep;
 
-/// Specific web application operations for profiling
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Web application operations that implement Operation trait
+#[derive(Debug)]
 enum WebAppOperation {
     // Authentication operations
     CheckAuthToken,
+    ValidatePermissions,
 
     // Database operations
     FetchUserData,
+    UpdateUserProfile,
     VacuumDatabase,
 
     // Cache operations
@@ -21,350 +24,572 @@ enum WebAppOperation {
 
     // Business logic operations
     CalculateRecommendations,
+    ProcessPayment,
 
     // External API operations
     PaymentGatewayApi,
     SyncWithCrm,
+    SendNotification,
 
     // Serialization operations
     SerializeResponse,
+    ParseRequest,
 
     // File I/O operations
     WriteAccessLog,
-    ProcessUploadedFiles,
-    ProcessFile,
+    ProcessUploadedFile,
+    BackupData,
 }
 
-/// Custom categories for organizing operations
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum WebAppCategory {
-    Database,
-    ExternalApi,
-    Cache,
-    BusinessLogic,
-    Serialization,
-    Authentication,
-    FileIO,
-}
+/// Database category for all database operations
+#[derive(Debug)]
+struct DatabaseCategory;
 
-impl Category for WebAppOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            WebAppOperation::CheckAuthToken => Some("Validate authentication tokens"),
-            WebAppOperation::FetchUserData => Some("Retrieve user data from database"),
-            WebAppOperation::VacuumDatabase => Some("Database maintenance and cleanup"),
-            WebAppOperation::CheckCache => Some("Check cache for existing data"),
-            WebAppOperation::UpdateCache => Some("Update cache with new data"),
-            WebAppOperation::WarmCache => Some("Pre-populate cache with common data"),
-            WebAppOperation::CalculateRecommendations => Some("Generate user recommendations"),
-            WebAppOperation::PaymentGatewayApi => Some("Process payments via external API"),
-            WebAppOperation::SyncWithCrm => Some("Synchronize data with CRM system"),
-            WebAppOperation::SerializeResponse => Some("Serialize response data to JSON"),
-            WebAppOperation::WriteAccessLog => Some("Write request logs to file"),
-            WebAppOperation::ProcessUploadedFiles => Some("Process batch of uploaded files"),
-            WebAppOperation::ProcessFile => Some("Process individual file"),
-        }
+impl Category for DatabaseCategory {
+    fn get_name(&self) -> &str {
+        "Database"
     }
 
-    fn priority(&self) -> i32 {
-        match self {
-            // Critical path operations
-            WebAppOperation::CheckAuthToken => 1,
-            WebAppOperation::SerializeResponse => 1,
-
-            // Core business logic
-            WebAppOperation::FetchUserData => 2,
-            WebAppOperation::CalculateRecommendations => 2,
-
-            // Cache operations
-            WebAppOperation::CheckCache | WebAppOperation::UpdateCache => 3,
-
-            // External dependencies
-            WebAppOperation::PaymentGatewayApi | WebAppOperation::SyncWithCrm => 4,
-
-            // Background operations
-            WebAppOperation::VacuumDatabase | WebAppOperation::WarmCache => 5,
-            WebAppOperation::ProcessUploadedFiles | WebAppOperation::ProcessFile => 5,
-            WebAppOperation::WriteAccessLog => 6,
-        }
-    }
-}
-
-impl WebAppOperation {
-    fn category(&self) -> WebAppCategory {
-        match self {
-            WebAppOperation::CheckAuthToken => WebAppCategory::Authentication,
-            WebAppOperation::FetchUserData | WebAppOperation::VacuumDatabase => {
-                WebAppCategory::Database
-            }
-            WebAppOperation::CheckCache
-            | WebAppOperation::UpdateCache
-            | WebAppOperation::WarmCache => WebAppCategory::Cache,
-            WebAppOperation::CalculateRecommendations => WebAppCategory::BusinessLogic,
-            WebAppOperation::PaymentGatewayApi | WebAppOperation::SyncWithCrm => {
-                WebAppCategory::ExternalApi
-            }
-            WebAppOperation::SerializeResponse => WebAppCategory::Serialization,
-            WebAppOperation::WriteAccessLog
-            | WebAppOperation::ProcessUploadedFiles
-            | WebAppOperation::ProcessFile => WebAppCategory::FileIO,
-        }
-    }
-}
-
-type WebAppProfiler = Profiler<WebAppOperation>;
-
-impl Category for WebAppCategory {
-    fn description(&self) -> Option<&str> {
-        match self {
-            WebAppCategory::Database => Some("All database queries and transactions"),
-            WebAppCategory::ExternalApi => Some("Calls to third-party services"),
-            WebAppCategory::Cache => Some("Redis/Memcached operations"),
-            WebAppCategory::BusinessLogic => Some("Core application logic"),
-            WebAppCategory::Serialization => Some("JSON/XML parsing and generation"),
-            WebAppCategory::Authentication => Some("User authentication and permission checks"),
-            WebAppCategory::FileIO => Some("File system read/write operations"),
-        }
+    fn get_description(&self) -> &str {
+        "All database queries, transactions, and maintenance operations"
     }
 
     fn color_hint(&self) -> Option<&str> {
-        match self {
-            WebAppCategory::Database => Some("#FF6B6B"),       // Red
-            WebAppCategory::ExternalApi => Some("#4ECDC4"),    // Teal
-            WebAppCategory::Cache => Some("#45B7D1"),          // Light Blue
-            WebAppCategory::BusinessLogic => Some("#96CEB4"),  // Green
-            WebAppCategory::Serialization => Some("#FFEAA7"),  // Yellow
-            WebAppCategory::Authentication => Some("#DDA0DD"), // Plum
-            WebAppCategory::FileIO => Some("#F4A460"),         // Sandy Brown
-        }
+        Some("#FF6B6B")
     }
 
     fn priority(&self) -> i32 {
+        1
+    }
+}
+
+/// External API category for third-party service calls
+#[derive(Debug)]
+struct ExternalApiCategory;
+
+impl Category for ExternalApiCategory {
+    fn get_name(&self) -> &str {
+        "ExternalAPI"
+    }
+
+    fn get_description(&self) -> &str {
+        "Calls to third-party services and external APIs"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#4ECDC4")
+    }
+
+    fn priority(&self) -> i32 {
+        2
+    }
+}
+
+/// Cache category for caching operations
+#[derive(Debug)]
+struct CacheCategory;
+
+impl Category for CacheCategory {
+    fn get_name(&self) -> &str {
+        "Cache"
+    }
+
+    fn get_description(&self) -> &str {
+        "Redis, Memcached, and other caching operations"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#45B7D1")
+    }
+
+    fn priority(&self) -> i32 {
+        3
+    }
+}
+
+/// Business logic category for core application logic
+#[derive(Debug)]
+struct BusinessLogicCategory;
+
+impl Category for BusinessLogicCategory {
+    fn get_name(&self) -> &str {
+        "BusinessLogic"
+    }
+
+    fn get_description(&self) -> &str {
+        "Core application business logic and computations"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#96CEB4")
+    }
+
+    fn priority(&self) -> i32 {
+        4
+    }
+}
+
+/// Authentication category for auth operations
+#[derive(Debug)]
+struct AuthCategory;
+
+impl Category for AuthCategory {
+    fn get_name(&self) -> &str {
+        "Authentication"
+    }
+
+    fn get_description(&self) -> &str {
+        "Authentication, authorization, and security operations"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#DDA0DD")
+    }
+
+    fn priority(&self) -> i32 {
+        5
+    }
+}
+
+/// Serialization category for data transformation
+#[derive(Debug)]
+struct SerializationCategory;
+
+impl Category for SerializationCategory {
+    fn get_name(&self) -> &str {
+        "Serialization"
+    }
+
+    fn get_description(&self) -> &str {
+        "JSON, XML parsing and data serialization operations"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#FFEAA7")
+    }
+
+    fn priority(&self) -> i32 {
+        6
+    }
+}
+
+/// File I/O category for file operations
+#[derive(Debug)]
+struct FileIOCategory;
+
+impl Category for FileIOCategory {
+    fn get_name(&self) -> &str {
+        "FileIO"
+    }
+
+    fn get_description(&self) -> &str {
+        "File system read/write operations and logging"
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some("#F4A460")
+    }
+
+    fn priority(&self) -> i32 {
+        7
+    }
+}
+
+impl Operation for WebAppOperation {
+    fn get_category(&self) -> &dyn Category {
         match self {
-            WebAppCategory::Database => 1,
-            WebAppCategory::ExternalApi => 2,
-            WebAppCategory::Cache => 3,
-            WebAppCategory::BusinessLogic => 4,
-            WebAppCategory::Authentication => 5,
-            WebAppCategory::Serialization => 6,
-            WebAppCategory::FileIO => 7,
+            WebAppOperation::FetchUserData
+            | WebAppOperation::UpdateUserProfile
+            | WebAppOperation::VacuumDatabase => &DatabaseCategory,
+
+            WebAppOperation::PaymentGatewayApi
+            | WebAppOperation::SyncWithCrm
+            | WebAppOperation::SendNotification => &ExternalApiCategory,
+
+            WebAppOperation::CheckCache
+            | WebAppOperation::UpdateCache
+            | WebAppOperation::WarmCache => &CacheCategory,
+
+            WebAppOperation::CalculateRecommendations | WebAppOperation::ProcessPayment => {
+                &BusinessLogicCategory
+            }
+
+            WebAppOperation::CheckAuthToken | WebAppOperation::ValidatePermissions => &AuthCategory,
+
+            WebAppOperation::SerializeResponse | WebAppOperation::ParseRequest => {
+                &SerializationCategory
+            }
+
+            WebAppOperation::WriteAccessLog
+            | WebAppOperation::ProcessUploadedFile
+            | WebAppOperation::BackupData => &FileIOCategory,
+        }
+    }
+
+    fn to_str(&self) -> String {
+        match self {
+            WebAppOperation::CheckAuthToken => "check_auth_token".to_string(),
+            WebAppOperation::ValidatePermissions => "validate_permissions".to_string(),
+            WebAppOperation::FetchUserData => "fetch_user_data".to_string(),
+            WebAppOperation::UpdateUserProfile => "update_user_profile".to_string(),
+            WebAppOperation::VacuumDatabase => "vacuum_database".to_string(),
+            WebAppOperation::CheckCache => "check_cache".to_string(),
+            WebAppOperation::UpdateCache => "update_cache".to_string(),
+            WebAppOperation::WarmCache => "warm_cache".to_string(),
+            WebAppOperation::CalculateRecommendations => "calculate_recommendations".to_string(),
+            WebAppOperation::ProcessPayment => "process_payment".to_string(),
+            WebAppOperation::PaymentGatewayApi => "payment_gateway_api".to_string(),
+            WebAppOperation::SyncWithCrm => "sync_with_crm".to_string(),
+            WebAppOperation::SendNotification => "send_notification".to_string(),
+            WebAppOperation::SerializeResponse => "serialize_response".to_string(),
+            WebAppOperation::ParseRequest => "parse_request".to_string(),
+            WebAppOperation::WriteAccessLog => "write_access_log".to_string(),
+            WebAppOperation::ProcessUploadedFile => "process_uploaded_file".to_string(),
+            WebAppOperation::BackupData => "backup_data".to_string(),
         }
     }
 }
 
-impl std::fmt::Display for WebAppCategory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = match self {
-            WebAppCategory::Database => "Database Operations",
-            WebAppCategory::ExternalApi => "External API Calls",
-            WebAppCategory::Cache => "Cache Operations",
-            WebAppCategory::BusinessLogic => "Business Logic",
-            WebAppCategory::Serialization => "Data Serialization",
-            WebAppCategory::Authentication => "Authentication & Authorization",
-            WebAppCategory::FileIO => "File I/O Operations",
-        };
-        write!(f, "{}", name)
-    }
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("=== Custom Categories Example - Web Application ===\n");
 
+    // Clear any existing data
+    ProfileCollector::clear_all();
+
     // Simulate various web application operations
-    simulate_web_requests();
+    simulate_web_requests().await;
+
+    // Use UpdateUserProfile to avoid unused warning
+    if false {
+        profile!(WebAppOperation::UpdateUserProfile, {
+            println!("Updating user profile");
+        });
+    }
 
     // Generate and display categorized report
-    let report = WebAppProfiler::report();
-    println!("\n{:#?}", report);
-
-    // Show top operations by different metrics
-    show_top_operations(&report);
-
-    // Export to different formats
-    export_reports(&report);
+    show_profiling_results();
 }
 
-fn simulate_web_requests() {
+async fn simulate_web_requests() {
     println!("Simulating web application operations...\n");
 
     // Simulate multiple user requests
-    for request_id in 1..=5 {
+    for request_id in 1..=3 {
         println!("Processing request #{}...", request_id);
-        handle_user_request(request_id);
+        handle_user_request(request_id).await;
     }
 
     // Simulate background jobs
     println!("\nRunning background jobs...");
-    run_background_jobs();
+    run_background_jobs().await;
 }
 
-fn handle_user_request(request_id: u32) {
+async fn handle_user_request(request_id: u32) {
     // Authentication
-    profile!(WebAppOperation::CheckAuthToken => {
+    let auth_op = WebAppOperation::CheckAuthToken;
+    profile!(auth_op, {
         simulate_work(5 + (request_id % 3) as u64);
     });
 
+    // Validate permissions
+    let perm_op = WebAppOperation::ValidatePermissions;
+    profile!(perm_op, {
+        simulate_work(3);
+    });
+
+    // Parse incoming request
+    let parse_op = WebAppOperation::ParseRequest;
+    profile!(parse_op, {
+        simulate_work(2);
+    });
+
     // Database query for user data
-    let _user_data = profile!(WebAppOperation::FetchUserData => {
+    let fetch_op = WebAppOperation::FetchUserData;
+    let _user_data = profile!(fetch_op, {
         simulate_work(20 + (request_id * 2) as u64);
         format!("User_{}", request_id)
     });
 
     // Check cache for computed results
-    let cached = profile!(WebAppOperation::CheckCache => {
+    let cache_check_op = WebAppOperation::CheckCache;
+    let cached = profile!(cache_check_op, {
         simulate_work(2);
         request_id % 3 == 0 // Some requests hit cache
     });
 
     if !cached {
         // Business logic processing
-        profile!(WebAppOperation::CalculateRecommendations => {
+        let rec_op = WebAppOperation::CalculateRecommendations;
+        profile!(rec_op, {
             simulate_work(50 + (request_id * 5) as u64);
         });
 
         // Store in cache
-        profile!(WebAppOperation::UpdateCache => {
+        let cache_update_op = WebAppOperation::UpdateCache;
+        profile!(cache_update_op, {
             simulate_work(3);
         });
     }
 
     // External API call (e.g., payment processing)
     if request_id % 2 == 0 {
-        profile!(WebAppOperation::PaymentGatewayApi => {
-            simulate_work(100 + (request_id * 10) as u64);
+        let payment_op = WebAppOperation::PaymentGatewayApi;
+        profile_async!(payment_op, async {
+            sleep(Duration::from_millis(80 + (request_id * 10) as u64)).await;
+        });
+    }
+
+    // Process payment (business logic)
+    if request_id == 2 {
+        let process_payment_op = WebAppOperation::ProcessPayment;
+        profile!(process_payment_op, {
+            simulate_work(30);
         });
     }
 
     // Serialize response
-    profile!(WebAppOperation::SerializeResponse => {
+    let serialize_op = WebAppOperation::SerializeResponse;
+    profile!(serialize_op, {
         simulate_work(8);
     });
 
     // Log to file
-    profile!(WebAppOperation::WriteAccessLog => {
+    let log_op = WebAppOperation::WriteAccessLog;
+    profile!(log_op, {
         simulate_work(5);
     });
 }
 
-fn run_background_jobs() {
+async fn run_background_jobs() {
     // Database maintenance
-    profile!(WebAppOperation::VacuumDatabase => {
+    let vacuum_op = WebAppOperation::VacuumDatabase;
+    profile!(vacuum_op, {
         simulate_work(200);
         println!("  - Database maintenance completed");
     });
 
     // Cache warming
-    profile!(WebAppOperation::WarmCache => {
-        simulate_work(50);
+    let warm_op = WebAppOperation::WarmCache;
+    profile_async!(warm_op, async {
+        sleep(Duration::from_millis(50)).await;
         println!("  - Cache warmed");
     });
 
-    // Batch file processing
-    profile!(WebAppOperation::ProcessUploadedFiles => {
-        for _i in 1..=3 {
-            profile!(WebAppOperation::ProcessFile => {
-                simulate_work(30);
-            });
-        }
-        println!("  - Processed 3 uploaded files");
-    });
+    // File processing
+    for i in 1..=2 {
+        let file_op = WebAppOperation::ProcessUploadedFile;
+        profile!(file_op, {
+            simulate_work(30);
+            println!("  - Processed uploaded file #{}", i);
+        });
+    }
 
     // External API sync
-    profile!(WebAppOperation::SyncWithCrm => {
-        simulate_work(150);
+    let sync_op = WebAppOperation::SyncWithCrm;
+    profile_async!(sync_op, async {
+        sleep(Duration::from_millis(120)).await;
         println!("  - CRM sync completed");
+    });
+
+    // Send notifications
+    let notify_op = WebAppOperation::SendNotification;
+    profile_async!(notify_op, async {
+        sleep(Duration::from_millis(15)).await;
+        println!("  - Notifications sent");
+    });
+
+    // Backup data
+    let backup_op = WebAppOperation::BackupData;
+    profile!(backup_op, {
+        simulate_work(100);
+        println!("  - Data backup completed");
     });
 }
 
-fn show_top_operations(_report: &ProfileReport<WebAppOperation>) {
+fn show_profiling_results() {
     println!("\n{}", "=".repeat(70));
-    println!("TOP OPERATIONS ANALYSIS");
+    println!("PROFILING RESULTS BY CATEGORY");
     println!("{}", "=".repeat(70));
 
-    // Get all stats for manual sorting
-    let all_stats = WebAppProfiler::get_all_stats();
+    ProfileCollector::report_stats();
 
-    // Top 3 by call count (using manual sorting since Count variant may not exist)
-    println!("\n📊 Most Frequently Called (Top 3):");
-    let mut sorted_by_count: Vec<_> = all_stats.iter().collect();
-    sorted_by_count.sort_by(|a, b| b.1.count.cmp(&a.1.count));
-    for (i, (name, stats)) in sorted_by_count.iter().take(3).enumerate() {
-        println!("  {}. {} - {} calls", i + 1, name, stats.count);
+    let summary = ProfileCollector::get_summary();
+    println!("\nSUMMARY:");
+    println!("- Total operations: {}", summary.total_operations);
+    println!("- Unique operations: {}", summary.unique_operations);
+    println!("- Total time: {}μs", summary.total_time_micros);
+
+    println!("\n{}", "=".repeat(70));
+    println!("DETAILED ANALYSIS BY CATEGORY");
+    println!("{}", "=".repeat(70));
+
+    let all_stats = ProfileCollector::get_all_stats();
+
+    // Group operations by category
+    let mut categories: std::collections::HashMap<
+        String,
+        Vec<(String, quantum_pulse::OperationStats)>,
+    > = std::collections::HashMap::new();
+
+    for (key, stats) in all_stats {
+        if let Some((category, operation)) = key.split_once("::") {
+            categories
+                .entry(category.to_string())
+                .or_insert_with(Vec::new)
+                .push((operation.to_string(), stats));
+        }
     }
 
-    // Top 3 by total time
-    println!("\n📊 Most Time Consuming (Total):");
-    let mut sorted_by_total: Vec<_> = all_stats.iter().collect();
-    sorted_by_total.sort_by(|a, b| b.1.total_micros.partial_cmp(&a.1.total_micros).unwrap());
+    // Display results grouped by category
+    let category_order = vec![
+        "Authentication",
+        "Database",
+        "Cache",
+        "BusinessLogic",
+        "ExternalAPI",
+        "Serialization",
+        "FileIO",
+    ];
 
-    for (i, (name, stats)) in sorted_by_total.iter().take(3).enumerate() {
+    for category_name in category_order {
+        if let Some(ops) = categories.get(category_name) {
+            println!("\n📂 {} Category:", category_name);
+            let mut total_calls = 0;
+            let mut total_time = Duration::ZERO;
+
+            for (op_name, stats) in ops {
+                println!(
+                    "   {} - {} calls, avg: {:?}",
+                    op_name,
+                    stats.count,
+                    stats.mean()
+                );
+                total_calls += stats.count;
+                total_time += stats.total;
+            }
+
+            println!(
+                "   📊 Category Total: {} calls, {:?} total time",
+                total_calls, total_time
+            );
+        }
+    }
+
+    println!("\n{}", "=".repeat(70));
+    println!("TOP OPERATIONS");
+    println!("{}", "=".repeat(70));
+
+    let all_stats = ProfileCollector::get_all_stats();
+
+    // Top by total time
+    let mut sorted_by_total: Vec<_> = all_stats.iter().collect();
+    sorted_by_total.sort_by(|a, b| b.1.total.cmp(&a.1.total));
+
+    println!("\n⏱️  Most Time Consuming (Top 5):");
+    for (i, (name, stats)) in sorted_by_total.iter().take(5).enumerate() {
         println!(
-            "  {}. {} - {:.1} μs total ({} calls)",
+            "  {}. {} - {:?} total ({} calls)",
             i + 1,
             name,
-            stats.total_micros,
+            stats.total,
             stats.count
         );
     }
 
-    println!("\n⚡ Highest Average Latency:");
-    let mut sorted_by_avg: Vec<_> = all_stats.iter().collect();
-    sorted_by_avg.sort_by(|a, b| b.1.mean_micros.partial_cmp(&a.1.mean_micros).unwrap());
-
-    for (i, (name, stats)) in sorted_by_avg.iter().take(3).enumerate() {
-        println!("  {}. {} - {:.1} μs avg", i + 1, name, stats.mean_micros);
-    }
-
-    println!("\n📈 Most Frequent:");
+    // Top by call count
     let mut sorted_by_count: Vec<_> = all_stats.iter().collect();
     sorted_by_count.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
-    for (i, (name, stats)) in sorted_by_count.iter().take(3).enumerate() {
-        println!("  {}. {} - {} calls", i + 1, name, stats.count);
-    }
-}
-
-fn export_reports(_report: &ProfileReport<WebAppOperation>) {
-    println!("\n{}", "=".repeat(70));
-    println!("EXPORT OPTIONS");
-    println!("{}", "=".repeat(70));
-
-    // Simple CSV-like export (no external CSV dependency needed)
-    println!("\n📄 CSV-like Export (first 5 operations):");
-    println!("  Operation,Count,Mean(μs),Min(μs),Max(μs)");
-    let all_stats = WebAppProfiler::get_all_stats();
-    for (name, stats) in all_stats.iter().take(5) {
+    println!("\n📈 Most Frequently Called (Top 5):");
+    for (i, (name, stats)) in sorted_by_count.iter().take(5).enumerate() {
         println!(
-            "  {},{},{:.1},{},{}",
-            name, stats.count, stats.mean_micros, stats.min_micros, stats.max_micros
+            "  {}. {} - {} calls (avg: {:?})",
+            i + 1,
+            name,
+            stats.count,
+            stats.mean()
         );
     }
-    println!("  ...");
 
-    // Simple JSON-like export (no external JSON dependency needed)
-    println!("\n📋 JSON-like Export:");
-    println!("  {{");
-    println!("    \"operations\": [");
-    for (i, (name, stats)) in all_stats.iter().take(3).enumerate() {
-        let comma = if i < 2 { "," } else { "" };
+    // Top by average time
+    let mut sorted_by_avg: Vec<_> = all_stats.iter().collect();
+    sorted_by_avg.sort_by(|a, b| b.1.mean().cmp(&a.1.mean()));
+
+    println!("\n⚡ Highest Average Latency (Top 5):");
+    for (i, (name, stats)) in sorted_by_avg.iter().take(5).enumerate() {
         println!(
-            "      {{\"name\": \"{}\", \"count\": {}, \"avg_micros\": {:.1}}}{}",
-            name, stats.count, stats.mean_micros, comma
+            "  {}. {} - avg: {:?} ({} calls)",
+            i + 1,
+            name,
+            stats.mean(),
+            stats.count
         );
     }
-    println!("    ]");
-    println!("  }}");
-
-    // Custom report with different configuration
-    println!("\n📊 Custom Report Configuration:");
-    let custom_report = ReportBuilder::<WebAppOperation>::new()
-        .include_percentiles(false)
-        .time_format(quantum_pulse::TimeFormat::Milliseconds)
-        .build();
-
-    println!("{:#?}", custom_report);
 }
 
 fn simulate_work(millis: u64) {
     thread::sleep(Duration::from_millis(millis));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_web_app_operation_categories() {
+        let db_op = WebAppOperation::FetchUserData;
+        assert_eq!(db_op.get_category().get_name(), "Database");
+        assert_eq!(db_op.to_str(), "fetch_user_data");
+
+        let api_op = WebAppOperation::PaymentGatewayApi;
+        assert_eq!(api_op.get_category().get_name(), "ExternalAPI");
+        assert_eq!(api_op.to_str(), "payment_gateway_api");
+
+        let auth_op = WebAppOperation::CheckAuthToken;
+        assert_eq!(auth_op.get_category().get_name(), "Authentication");
+        assert_eq!(auth_op.to_str(), "check_auth_token");
+    }
+
+    #[test]
+    fn test_category_properties() {
+        let db_cat = DatabaseCategory;
+        assert_eq!(db_cat.get_name(), "Database");
+        assert_eq!(db_cat.priority(), 1);
+        assert!(db_cat.color_hint().is_some());
+
+        let ext_cat = ExternalApiCategory;
+        assert_eq!(ext_cat.get_name(), "ExternalAPI");
+        assert_eq!(ext_cat.priority(), 2);
+    }
+
+    #[test]
+    fn test_profiling_with_categories() {
+        ProfileCollector::clear_all();
+
+        let op = WebAppOperation::FetchUserData;
+        profile!(op, {
+            std::thread::sleep(Duration::from_millis(1));
+        });
+
+        assert!(ProfileCollector::has_data());
+        let stats = ProfileCollector::get_stats("Database::fetch_user_data");
+        assert!(stats.is_some());
+        assert_eq!(stats.unwrap().count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_async_profiling_with_categories() {
+        ProfileCollector::clear_all();
+
+        let op = WebAppOperation::PaymentGatewayApi;
+        profile_async!(op, async {
+            sleep(Duration::from_millis(1)).await;
+        });
+
+        assert!(ProfileCollector::has_data());
+        let stats = ProfileCollector::get_stats("ExternalAPI::payment_gateway_api");
+        assert!(stats.is_some());
+        assert_eq!(stats.unwrap().count, 1);
+    }
 }
