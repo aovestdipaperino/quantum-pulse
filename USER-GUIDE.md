@@ -9,7 +9,7 @@
 1. [The Story of Lost Performance](#the-story-of-lost-performance)
 2. [Finding Your Place in the Profiling Spectrum](#finding-your-place-in-the-profiling-spectrum)
 3. [The Enum Revolution](#the-enum-revolution)
-4. [Getting Started: Your First Profile](#getting-started-your-first-profile)
+4. [Getting Started with ProfileOp: Your First Profile](#getting-started-with-profileop-your-first-profile)
 5. [Real-World Journey: Building a Trading System](#real-world-journey-building-a-trading-system)
 6. [The Web Service Chronicles](#the-web-service-chronicles)
 7. [Advanced Patterns and Practices](#advanced-patterns-and-practices)
@@ -78,9 +78,17 @@ Before diving into Quantum Pulse, let's understand where it fits in your perform
 
 ---
 
-## The Enum Revolution
+## The Enum Revolution with ProfileOp
 
-Here's where Quantum Pulse differs fundamentally from other profiling libraries: **it enforces type-safe profiling through enums**. No more string literals scattered throughout your codebase. No more typos causing lost profiling data. No more wondering what operations actually belong together.
+Here's where Quantum Pulse differs fundamentally from other profiling libraries: **it enforces type-safe profiling through enums with automatic implementation via the ProfileOp derive macro**. No more string literals scattered throughout your codebase. No more typos causing lost profiling data. No more wondering what operations actually belong together. And best of all, no boilerplate code!
+
+### The Power of ProfileOp
+
+With the `ProfileOp` derive macro, you get:
+1. **Automatic trait implementation** - just derive and annotate
+2. **Built-in category management** - categories are defined once and reused
+3. **Support for complex enums** - unit, tuple, and struct variants all work
+4. **Zero runtime overhead** - everything compiles away in production
 
 ### The Problem with String-Based Profiling
 
@@ -98,16 +106,51 @@ Problems with this approach:
 - **Typos create phantom operations** that appear in reports
 - **Inconsistent naming** makes analysis difficult  
 - **No compile-time verification** of operation names
+- **No category management** - operations are just strings
+- **Manual boilerplate** for implementing traits
 - **No logical grouping** of related operations
 - **Refactoring is dangerous** - changing strings breaks historical data
 
-### The Enum Solution
+### The ProfileOp Solution (Recommended)
+
+Quantum Pulse provides a derive macro that eliminates all these problems:
+
+```rust
+use quantum_pulse::{ProfileOp, profile};
+
+#[derive(Debug, ProfileOp)]
+enum AuthOps {
+    #[category(name = "Authentication", description = "User authentication")]
+    UserAuth,
+    
+    #[category(name = "Authentication")]  // Reuses description
+    CheckPermissions,
+    
+    #[category(name = "Cache", description = "Cache operations")]
+    CacheLookup,
+}
+
+// Type-safe, categorized, zero boilerplate!
+profile!(AuthOps::UserAuth, { authenticate_user() });
+profile!(AuthOps::CheckPermissions, { check_permissions() });
+profile!(AuthOps::CacheLookup, { get_from_cache() });
+```
+
+Benefits of this approach:
+- **Compile-time verification** - typos become compile errors
+- **Automatic categorization** - operations are grouped intelligently
+- **Zero boilerplate** - no manual trait implementations
+- **Self-documenting** - the enum is your operation catalog
+- **IDE support** - autocomplete and refactoring work perfectly
+- **Refactoring safety** - renaming operations updates all references
+
+### Alternative: Manual Implementation
 
 Quantum Pulse takes a radically different approach:
 
 ```rust
-// THIS is the Quantum Pulse way - Type-safe and maintainable
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+// Manual implementation (when you need custom behavior)
+#[derive(Debug)]
 enum TradingOperation {
     // Market operations
     OrderValidation,
@@ -160,7 +203,7 @@ profile!(TradingOperation::RiskAssessment => {
 
 ---
 
-## Getting Started: Your First Profile
+## Getting Started with ProfileOp: Your First Profile
 
 Let's build your first Quantum Pulse-enabled application step by step.
 
@@ -173,58 +216,52 @@ Think about what you want to measure in your application. Don't try to measure e
 - You want to track over time
 
 ```rust
-use quantum_pulse::{Category, profile};
+use quantum_pulse::{ProfileOp, profile, ProfileCollector};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, ProfileOp)]
 enum WebServerOperation {
     // Request handling
+    #[category(name = "Request", description = "HTTP request processing")]
     RequestParsing,
+    
+    #[category(name = "Auth", description = "Authentication and authorization")]
     Authentication,
+    
+    #[category(name = "Auth")]
     Authorization,
+    
+    #[category(name = "Processing", description = "Business logic processing")]
     RequestProcessing,
+    
+    #[category(name = "Response", description = "Response formatting")]
     ResponseSerialization,
     
     // Data access
+    #[category(name = "Database", description = "Database operations")]
     DatabaseQuery,
+    
+    #[category(name = "Cache", description = "Cache operations")]
     CacheLookup,
+    
+    #[category(name = "Cache")]
     CacheUpdate,
     
     // External services
+    #[category(name = "External", description = "External API calls")]
     PaymentApiCall,
+    
+    #[category(name = "External")]
     EmailServiceCall,
     
     // Maintenance
+    #[category(name = "Maintenance", description = "Background maintenance tasks")]
     SessionCleanup,
+    
+    #[category(name = "Maintenance")]
     MetricsAggregation,
 }
 
-// Basic implementation of Operation trait
-impl Operation for WebServerOperation {}
-
-impl Category for WebServerOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            Self::RequestParsing => Some("Parsing incoming HTTP requests"),
-            Self::Authentication => Some("Validating user credentials"),
-            Self::DatabaseQuery => Some("Executing database queries"),
-            Self::CacheLookup => Some("Reading from Redis cache"),
-            Self::PaymentApiCall => Some("Calling external payment processor"),
-            _ => None,
-        }
-    }
-    
-    fn priority(&self) -> i32 {
-        match self {
-            // Critical path operations
-            Self::RequestParsing | Self::Authentication => 1,
-            Self::DatabaseQuery | Self::CacheLookup => 2,
-            Self::PaymentApiCall => 3,
-            // Background operations
-            Self::SessionCleanup | Self::MetricsAggregation => 4,
-            _ => 3,
-        }
-    }
-}
+// That's it! No manual trait implementations needed
 ```
 
 ### Step 2: Add Profiling to Your Code
@@ -234,24 +271,24 @@ Now instrument your code with profiling calls:
 ```rust
 async fn handle_user_login(request: LoginRequest) -> Result<LoginResponse, Error> {
     // Parse and validate the request
-    let credentials = profile!(WebServerOperation::RequestParsing => {
+    let credentials = profile!(WebServerOperation::RequestParsing, {
         parse_login_request(request)?
     });
     
     // Authenticate the user
-    let user = profile!(WebServerOperation::Authentication => async {
+    let user = profile_async!(WebServerOperation::Authentication, async {
         authenticate_user(credentials).await?
-    });
+    }).await;
     
     // Check user permissions
-    let permissions = profile!(WebServerOperation::Authorization => async {
+    let permissions = profile_async!(WebServerOperation::Authorization, async {
         get_user_permissions(user.id).await?
-    });
+    }).await;
     
     // Create session and return response
-    let session = profile!(WebServerOperation::CacheUpdate => async {
+    let session = profile_async!(WebServerOperation::CacheUpdate, async {
         create_user_session(user.id, permissions).await?
-    });
+    }).await;
     
     Ok(LoginResponse::success(session.token))
 }
@@ -260,22 +297,22 @@ async fn handle_user_login(request: LoginRequest) -> Result<LoginResponse, Error
 ### Step 3: Generate Reports
 
 ```rust
-use quantum_pulse::{Profiler, ReportBuilder};
+use quantum_pulse::{ProfileCollector, ReportBuilder};
 
 // Get basic statistics
-let stats = Profiler::<WebServerOperation>::get_all_stats();
+let stats = ProfileCollector::get_all_stats();
 for (operation, stat) in stats {
     println!("{}: {:.2}μs avg over {} calls", 
-             operation, stat.mean_micros, stat.count);
+             operation, stat.mean().as_micros(), stat.count);
 }
 
 // Generate detailed report
-let report = ReportBuilder::<WebServerOperation>::new()
+let report = ReportBuilder::new()
     .group_by_category(true)
     .include_percentiles(true)
     .build();
 
-println!("{:#?}", report);
+println!("{}", report.to_string());
 ```
 
 ---
@@ -289,47 +326,46 @@ Let's follow the journey of building a high-frequency trading system to see how 
 Sarah is building a cryptocurrency arbitrage system. It needs to detect price differences across exchanges and execute trades within 100 microseconds. Her initial implementation looks promising in backtests, but live trading shows inconsistent performance.
 
 ```rust
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+use quantum_pulse::{ProfileOp, profile, profile_async};
+
+#[derive(Debug, ProfileOp)]
 enum ArbitrageOperation {
+    #[category(name = "DataFeed", description = "Price feed processing")]
     PriceFeedParsing,
+    
+    #[category(name = "Analysis", description = "Market analysis and opportunity detection")]
     ArbitrageDetection,
+    
+    #[category(name = "Trading", description = "Order management")]
     OrderCreation,
+    
+    #[category(name = "Trading")]
     OrderSubmission,
+    
+    #[category(name = "Portfolio", description = "Position and portfolio updates")]
     PositionUpdate,
 }
 
-impl Category for ArbitrageOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            Self::PriceFeedParsing => Some("Parsing real-time price feeds from exchanges"),
-            Self::ArbitrageDetection => Some("Detecting profitable arbitrage opportunities"),
-            Self::OrderCreation => Some("Creating buy/sell orders for arbitrage"),
-            Self::OrderSubmission => Some("Submitting orders to exchanges"),
-            Self::PositionUpdate => Some("Updating portfolio positions"),
-        }
-    }
-}
-
 async fn process_price_update(price_feed: PriceFeed) -> Result<(), TradingError> {
-    let prices = profile!(ArbitrageOperation::PriceFeedParsing => {
+    let prices = profile!(ArbitrageOperation::PriceFeedParsing, {
         parse_price_feed(price_feed)?
     });
     
     let opportunities = profile!(ArbitrageOperation::ArbitrageDetection, {
-        detect_arbitrage_opportunities(result)
+        detect_arbitrage_opportunities(&prices)?
     });
     
     for opportunity in opportunities {
-        let orders = profile!(ArbitrageOperation::OrderCreation => {
+        let orders = profile!(ArbitrageOperation::OrderCreation, {
             create_arbitrage_orders(&opportunity)?
         });
         
-        profile!(ArbitrageOperation::OrderSubmission => async {
+        profile_async!(ArbitrageOperation::OrderSubmission, async {
             submit_orders_parallel(orders).await?
-        });
+        }).await;
         
-        profile!(ArbitrageOperation::PositionUpdate => {
-            update_positions(&opportunity)
+        profile!(ArbitrageOperation::PositionUpdate, {
+            update_positions(&opportunity)?
         });
     }
     

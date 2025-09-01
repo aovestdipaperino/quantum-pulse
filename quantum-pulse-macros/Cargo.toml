@@ -1,0 +1,21 @@
+[package]
+name = "quantum-pulse-macros"
+version = "0.1.5"
+edition = "2021"
+authors = ["Enzo Lombardi <enzinol@gmail.com>"]
+description = "Procedural macros for the quantum-pulse profiling library"
+documentation = "https://docs.rs/quantum-pulse-macros"
+repository = "https://github.com/aovestdipaperino/quantum-pulse"
+homepage = "https://github.com/aovestdipaperino/quantum-pulse"
+license = "MIT OR Apache-2.0"
+readme = "../README.md"
+keywords = ["profiling", "performance", "macros", "proc-macro"]
+categories = ["development-tools::profiling", "development-tools"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+quote = "1.0"
+proc-macro2 = "1.0"

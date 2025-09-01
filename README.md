@@ -1,14 +1,21 @@
 # Quantum Pulse
 
+<div align="center">
+  <img src="https://raw.githubusercontent.com/aovestdipaperino/quantum-pulse/main/logo.png" alt="Quantum Pulse Logo" width="600">
+</div>
+
+<br>
+
 [![Crates.io](https://img.shields.io/crates/v/quantum-pulse.svg)](https://crates.io/crates/quantum-pulse)
 [![Documentation](https://docs.rs/quantum-pulse/badge.svg)](https://docs.rs/quantum-pulse)
-[![License](https://img.shields.io/crates/l/quantum-pulse.svg)](https://github.com/yourusername/quantum-pulse)
+[![License](https://img.shields.io/crates/l/quantum-pulse.svg)](https://github.com/aovestdipaperino/quantum-pulse)
 
 A lightweight, customizable profiling library for Rust applications with support for custom categories and percentile statistics.
 
 ## Features
 
 - 🚀 **True Zero-Cost Abstraction** - Stub implementation compiles to nothing when disabled
+- 🎯 **Derive Macro Support** - Automatic implementation with `#[derive(ProfileOp)]`
 - 📊 **Percentile Statistics** - Automatic calculation of p50, p95, p99, and p99.9 percentiles using HDR histograms
 - 🏷️ **Type-Safe Categories** - Define your own operation categories with compile-time guarantees
 - 📈 **Multiple Output Formats** - Console and CSV export options
@@ -24,17 +31,17 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 # For production builds (zero overhead)
-quantum-pulse = { version = "0.1.0", default-features = false }
+quantum-pulse = { version = "0.1.5", default-features = false }
 
-# For development builds (with profiling)
-quantum-pulse = { version = "0.1.0", features = ["full"] }
+# For development builds (with profiling and macros)
+quantum-pulse = { version = "0.1.5", features = ["full"] }
 ```
 
 Or use feature flags in your application:
 
 ```toml
 [dependencies]
-quantum-pulse = { version = "0.1.0", default-features = false }
+quantum-pulse = { version = "0.1.5", default-features = false }
 
 [features]
 profiling = ["quantum-pulse/full"]
@@ -42,348 +49,248 @@ profiling = ["quantum-pulse/full"]
 
 ## Quick Start
 
-### Basic Usage
+### 🎯 Recommended: Using the Derive Macro
+
+The easiest and most maintainable way to use quantum-pulse is with the `ProfileOp` derive macro:
 
 ```rust
-use quantum_pulse::{profile, Category, Operation, ProfileCollector};
+use quantum_pulse::{ProfileOp, profile, ProfileCollector};
 
-// Define your operations enum
-#[derive(Debug)]
+// Simply derive ProfileOp and add category attributes
+#[derive(Debug, ProfileOp)]
 enum AppOperation {
-    DatabaseQuery,
-    DataProcessing,
-    NetworkRequest,
-}
-
-// Implement the Operation trait
-impl Operation for AppOperation {
-    fn to_str(&self) -> String {
-        // Optional: customize the string representation
-        format!("{:?}", self)
-    }
-
-    fn get_category(&self) -> &dyn Category {
-        // Optional: provide a category implementation
-        &quantum_pulse::NoCategory
-    }
+    #[category(name = "Database", description = "Database operations")]
+    QueryUser,
+    
+    #[category(name = "Database")]  // Reuses the description
+    UpdateUser,
+    
+    #[category(name = "Network", description = "External API calls")]
+    HttpRequest,
+    
+    #[category(name = "Cache", description = "Cache operations")]
+    ReadCache,
+    
+    ComputeHash,  // No category attribute - uses variant name as category
 }
 
 fn main() {
-    // Profile operations directly with enums
-    let result = profile!(AppOperation::DatabaseQuery, {
-        expensive_database_operation()
+    // Profile operations with zero boilerplate
+    let user = profile!(AppOperation::QueryUser, {
+        fetch_user_from_database()
     });
 
-    // Profile another operation
-    let data = profile!(AppOperation::DataProcessing, {
-        process_large_dataset()
+    let result = profile!(AppOperation::HttpRequest, {
+        call_external_api()
     });
 
-    // Generate a report
-    println!("{:#?}", ProfileCollector::generate_report());
+    // Generate and display report
+    let report = ProfileCollector::get_summary();
+    println!("Total operations: {}", report.total_operations);
 }
 ```
 
-### Type-Safe Operations with Categories
+### Category Management
 
-Define specific operations with automatic categorization:
+The `ProfileOp` macro intelligently manages categories:
 
 ```rust
-use quantum_pulse::{Profiler, Category, profile};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum WebServerOperation {
-    AuthenticateUser,
-    FetchUserData,
-    UpdateCache,
-    ProcessRequest,
-    SerializeResponse,
-}
-
-impl Category for WebServerOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            WebServerOperation::AuthenticateUser => Some("User authentication"),
-            WebServerOperation::FetchUserData => Some("Database queries"),
-            WebServerOperation::UpdateCache => Some("Cache operations"),
-            WebServerOperation::ProcessRequest => Some("Business logic"),
-            WebServerOperation::SerializeResponse => Some("Response formatting"),
-        }
-    }
-
-    fn priority(&self) -> i32 {
-        match self {
-            WebServerOperation::AuthenticateUser => 1,  // Critical path
-            WebServerOperation::FetchUserData => 2,     // Important
-            WebServerOperation::ProcessRequest => 2,
-            WebServerOperation::UpdateCache => 3,       // Supporting
-            WebServerOperation::SerializeResponse => 3,
-        }
-    }
-}
-
-type WebProfiler = Profiler<WebServerOperation>;
-
-async fn handle_request(user_id: u64) -> Response {
-    // Profile with enum-based operations
-    let user = profile!(WebServerOperation::AuthenticateUser => {
-        authenticate_user(user_id)
-    });
-
-    let data = profile!(WebServerOperation::FetchUserData => {
-        database.get_user_data(user_id)
-    });
-
-    let response = profile!(WebServerOperation::SerializeResponse => {
-        serialize_response(data)
-    });
-
-    // Generate categorized report
-    let report = WebProfiler::report();
-    println!("{:#?}", report);
+#[derive(Debug, ProfileOp)]
+enum DatabaseOps {
+    #[category(name = "Query", description = "Read operations")]
+    SelectUsers,
     
-    response
+    #[category(name = "Query")]  // Automatically reuses "Read operations" description
+    SelectPosts,
+    
+    #[category(name = "Mutation", description = "Write operations")]
+    InsertUser,
+    
+    #[category(name = "Mutation")]  // Automatically reuses "Write operations" description
+    UpdateUser,
+    
+    DeleteUser,  // Uses "DeleteUser" as both name and description
 }
 ```
 
-### Async Support
+### Alternative: Manual Implementation
+
+For advanced use cases or when you prefer explicit control:
 
 ```rust
-use quantum_pulse::{profile_async, Operation};
+use quantum_pulse::{Operation, Category, profile};
 
 #[derive(Debug)]
-enum AsyncOperation {
-    HttpRequest,
+enum AppOperation {
     DatabaseQuery,
-    ProcessData,
+    NetworkRequest,
 }
 
-impl Operation for AsyncOperation {}
-
-async fn fetch_data() -> Result<Data, Error> {
-    // Profile async operations with enums
-    profile_async!(AsyncOperation::HttpRequest, async {
-        client.get("https://api.example.com/data").await
-    }).await
-}
-
-async fn main() {
-    let data = profile_async!(AsyncOperation::ProcessData, async {
-        fetch_data().await
-    }).await;
-}
-```
-
-### Manual Recording
-
-For precise control over timing measurements:
-
-```rust
-use quantum_pulse::{Profiler, Category};
-use std::time::Instant;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum ProcessingOperation {
-    BatchProcessing,
-    FileIO,
-}
-
-impl Category for ProcessingOperation {
-    fn description(&self) -> Option<&str> {
+// Implement Operation trait manually
+impl Operation for AppOperation {
+    fn get_category(&self) -> &dyn Category {
         match self {
-            ProcessingOperation::BatchProcessing => Some("Batch data processing"),
-            ProcessingOperation::FileIO => Some("File I/O operations"),
+            AppOperation::DatabaseQuery => &DatabaseCategory,
+            AppOperation::NetworkRequest => &NetworkCategory,
         }
     }
 }
 
-fn process_with_io() {
-    let start = Instant::now();
-    
-    // Do some processing
-    process_part_1();
-    
-    // Exclude I/O wait time from measurement
-    let processing_time = start.elapsed();
-    let data = read_from_disk(); // Not measured
-    
-    let start2 = Instant::now();
-    process_part_2(data);
-    let processing_time2 = start2.elapsed();
-    
-    // Manually record total processing time
-    Profiler::<ProcessingOperation>::record_with_category(
-        &format!("{:?}", ProcessingOperation::BatchProcessing),
-        ProcessingOperation::BatchProcessing,
-        (processing_time + processing_time2).as_micros() as u64
-    );
-}
-```
-
-### Type-Safe Operation Tracking
-
-Define your operations as Debug-derived enums for compile-time safety:
-
-```rust
-use quantum_pulse::{Profiler, Category, profile};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum UserOperation {
-    FetchUser,
-    SaveUser,
-    QueryCache,
+// Define custom categories
+struct DatabaseCategory;
+impl Category for DatabaseCategory {
+    fn get_name(&self) -> &str { "Database" }
+    fn get_description(&self) -> &str { "Database operations" }
 }
 
-impl Category for UserOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            UserOperation::FetchUser => Some("Fetch user from database"),
-            UserOperation::SaveUser => Some("Save user to database"),
-            UserOperation::QueryCache => Some("Query cache for user data"),
-        }
-    }
-
-    fn priority(&self) -> i32 {
-        match self {
-            UserOperation::FetchUser => 1,
-            UserOperation::SaveUser => 2,
-            UserOperation::QueryCache => 1,
-        }
-    }
-}
-
-// Use with type-safe enum operations
-fn fetch_user_data(user_id: u64) -> User {
-    profile!(UserOperation::FetchUser => {
-        fetch_user_from_db(user_id)
-    })
+struct NetworkCategory;
+impl Category for NetworkCategory {
+    fn get_name(&self) -> &str { "Network" }
+    fn get_description(&self) -> &str { "Network operations" }
 }
 ```
 
 ## Advanced Features
 
-### Report Configuration
-
-Customize report generation with various options:
+### Async Support
 
 ```rust
-use quantum_pulse::{ReportBuilder, TimeFormat, Category};
+use quantum_pulse::{ProfileOp, profile_async};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum AppOperation {
+#[derive(Debug, ProfileOp)]
+enum AsyncOperation {
+    #[category(name = "IO", description = "I/O operations")]
+    FileRead,
+    
+    #[category(name = "Network", description = "Network operations")]
+    HttpRequest,
+    
+    #[category(name = "Database")]
     DatabaseQuery,
-    ApiCall,
-    CacheOperation,
 }
 
-impl Category for AppOperation {
-    fn description(&self) -> Option<&str> {
-        match self {
-            AppOperation::DatabaseQuery => Some("Database operations"),
-            AppOperation::ApiCall => Some("External API calls"),
-            AppOperation::CacheOperation => Some("Cache operations"),
-        }
-    }
+async fn fetch_data() -> Result<Data, Error> {
+    // Profile async operations seamlessly
+    let data = profile_async!(AsyncOperation::HttpRequest, async {
+        client.get("https://api.example.com/data").await
+    }).await;
+    
+    profile_async!(AsyncOperation::DatabaseQuery, async {
+        process_data(data).await
+    }).await
+}
+```
+
+### Complex Enum Variants
+
+The `ProfileOp` macro supports all enum variant types:
+
+```rust
+#[derive(Debug, ProfileOp)]
+enum ComplexOperation {
+    // Unit variant
+    #[category(name = "Simple")]
+    Basic,
+    
+    // Tuple variant with data
+    #[category(name = "Database", description = "Database operations")]
+    Query(String),
+    
+    // Struct variant with named fields
+    #[category(name = "Cache", description = "Cache operations")]
+    CacheOp { key: String, ttl: u64 },
 }
 
-let report = ReportBuilder::<AppOperation>::new()
+fn example() {
+    let op1 = ComplexOperation::Basic;
+    let op2 = ComplexOperation::Query("SELECT * FROM users".to_string());
+    let op3 = ComplexOperation::CacheOp { 
+        key: "user:123".to_string(), 
+        ttl: 3600 
+    };
+    
+    // All variants work seamlessly with profiling
+    profile!(op1, { /* work */ });
+    profile!(op2, { /* work */ });
+    profile!(op3, { /* work */ });
+}
+```
+
+### Report Generation
+
+```rust
+use quantum_pulse::{ProfileCollector, ReportBuilder, TimeFormat};
+
+// Quick summary
+let summary = ProfileCollector::get_summary();
+println!("Total operations: {}", summary.total_operations);
+println!("Total time: {} µs", summary.total_time_micros);
+
+// Detailed report with configuration
+let report = ReportBuilder::new()
     .include_percentiles(true)
     .group_by_category(true)
     .time_format(TimeFormat::Milliseconds)
     .build();
 
-println!("{:#?}", report);
-```
+println!("{}", report.to_string());
 
-### Export Formats
-
-```rust
-use quantum_pulse::Profiler;
-
-type AppProfiler = Profiler<AppOperation>;
-
-// Console output (default)
-let report = AppProfiler::report();
-println!("{:#?}", report);
-
-// Simple CSV-like export
-let stats = AppProfiler::get_all_stats();
-let mut csv_content = String::from("Operation,Count,Mean(μs),Min(μs),Max(μs)\n");
+// Export to CSV
+let stats = ProfileCollector::get_all_stats();
+let mut csv = String::from("Operation,Count,Mean(µs)\n");
 for (name, stat) in stats {
-    csv_content.push_str(&format!(
-        "{},{},{:.1},{},{}\n",
-        name, stat.count, stat.mean_micros, stat.min_micros, stat.max_micros
-    ));
+    csv.push_str(&format!("{},{},{:.2}\n", 
+        name, stat.count, stat.mean().as_micros()));
 }
-std::fs::write("profile_report.csv", csv_content).unwrap();
+std::fs::write("profile.csv", csv).unwrap();
 ```
 
-### Operation Categories
-### Type-Safe Operations with Categories
+### Pausable Timers
 
-Define operation categories with metadata for better organization:
+For operations where you need to exclude certain periods:
 
 ```rust
-use quantum_pulse::{Category, Operation, profile};
+use quantum_pulse::{PausableTimer, ProfileOp};
 
-// Define critical operations
-#[derive(Debug)]
-enum CriticalOperation {
-    ApiRequest,
-    DatabaseTransaction,
-    UserAuthentication,
+#[derive(Debug, ProfileOp)]
+enum Operation {
+    #[category(name = "Processing")]
+    DataProcessing,
 }
 
-// Custom category for critical path
-#[derive(Debug)]
-struct CriticalCategory;
-
-impl Category for CriticalCategory {
-    fn get_name(&self) -> &str {
-        "Critical"
-    }
-
-    fn get_description(&self) -> &str {
-        "Operations on the critical path"
-    }
-
-    fn priority(&self) -> i32 {
-        1  // High priority
-    }
+fn process_with_io() {
+    let mut timer = PausableTimer::new(&Operation::DataProcessing);
+    
+    // Processing phase 1 (measured)
+    process_part_1();
+    
+    timer.pause();
+    // I/O operation (not measured)
+    let data = read_from_disk();
+    timer.resume();
+    
+    // Processing phase 2 (measured)
+    process_part_2(data);
+    
+    // Timer automatically records on drop
 }
-
-impl Operation for CriticalOperation {
-    fn to_str(&self) -> String {
-        format!("{:?}", self)
-    }
-
-    fn get_category(&self) -> &dyn Category {
-        &CriticalCategory
-    }
-}
-
-// Use type-safe operations for consistent profiling
-let result = profile!(CriticalOperation::ApiRequest, {
-    make_api_call()
-});
 ```
 
-### Zero-Cost Abstractions
+## Zero-Cost Abstractions
 
-Quantum Pulse implements true zero-cost abstractions through its innovative stub feature system:
+Quantum Pulse implements true zero-cost abstractions through compile-time feature selection:
 
 ### How It Works
 
 ```rust
-#[derive(Debug)]
-enum AppOperation {
-    DatabaseQuery,
+#[derive(Debug, ProfileOp)]
+enum AppOp {
+    #[category(name = "Critical")]
+    ImportantWork,
 }
 
-impl Operation for AppOperation {}
-
 // Your code always looks the same
-let result = profile!(AppOperation::DatabaseQuery, {
+let result = profile!(AppOp::ImportantWork, {
     expensive_operation()
 });
 
@@ -405,13 +312,94 @@ let result = profile!(AppOperation::DatabaseQuery, {
 | Stub (default) | **Zero** - methods are empty and inlined away | Production |
 | Full | ~200-300ns per operation | Development, debugging |
 
-### Implementation Details
+## Migration Guide
 
-The library provides two implementations:
-- **Stub**: Empty trait implementations that compile to nothing
-- **Full**: Complete profiling implementation with HDR histograms
+### From String-based Profiling
 
-Both expose the exact same API, ensuring your code never needs conditional compilation.
+If you're currently using string-based operation names, migrate to type-safe enums:
+
+```rust
+// Before: String-based (error-prone, no compile-time checks)
+profile!("database_query", {
+    query_database()
+});
+
+// After: Type-safe with ProfileOp (recommended)
+#[derive(Debug, ProfileOp)]
+enum DbOp {
+    #[category(name = "Database")]
+    Query,
+}
+
+profile!(DbOp::Query, {
+    query_database()
+});
+```
+
+### From Manual Implementation
+
+If you have existing manual `Operation` implementations, you can gradually migrate:
+
+```rust
+// Before: Manual implementation
+#[derive(Debug)]
+enum OldOp {
+    Task1,
+    Task2,
+}
+
+impl Operation for OldOp {
+    fn get_category(&self) -> &dyn Category {
+        // Manual category logic
+    }
+}
+
+// After: Simply add ProfileOp derive
+#[derive(Debug, ProfileOp)]
+enum NewOp {
+    #[category(name = "Tasks", description = "Application tasks")]
+    Task1,
+    
+    #[category(name = "Tasks")]
+    Task2,
+}
+```
+
+## Examples
+
+Check out the `examples/` directory for comprehensive examples:
+
+- `macro_derive.rs` - **Recommended**: Using the ProfileOp derive macro
+- `basic.rs` - Simple profiling example
+- `custom_categories.rs` - Manual category implementation
+- `async_profiling.rs` - Profiling async code
+- `trading_system.rs` - Real-world trading system example
+
+Run examples with:
+
+```bash
+# Recommended: See the derive macro in action
+cargo run --example macro_derive --features full
+
+# Other examples
+cargo run --example basic --features full
+cargo run --example async_profiling --features full
+cargo run --example trading_system --features full
+```
+
+## Feature Flags
+
+- `full`: Enable full profiling functionality with HDR histograms and derive macros
+- `macros`: Enable only the derive macros (included in `full`)
+- Default (no features): Stub implementation with zero overhead
+
+## Best Practices
+
+1. **Use ProfileOp Derive**: Start with the derive macro for cleaner, more maintainable code
+2. **Organize by Category**: Group related operations under the same category name
+3. **Descriptive Names**: Use clear, descriptive names for both categories and operations
+4. **Profile Boundaries**: Profile at meaningful boundaries (API calls, database queries, etc.)
+5. **Avoid Over-Profiling**: Don't profile every function - focus on potential bottlenecks
 
 ## Performance Considerations
 
@@ -422,31 +410,6 @@ The library is designed with performance in mind:
 - **Lock-Free Operations**: Using atomic operations and thread-local storage
 - **Smart Inlining**: Critical paths marked with `#[inline(always)]` in stub mode
 - **No Runtime Checks**: Feature selection happens at compile time
-
-## Feature Flags
-
-- `full`: Enable full profiling functionality with HDR histograms
-- Default (no features): Stub implementation with zero overhead
-
-When no features are enabled, all profiling operations compile to no-ops that are completely eliminated by the optimizer.
-
-## Examples
-
-Check out the `examples/` directory for more comprehensive examples:
-
-- `basic.rs` - Simple enum-based profiling example
-- `custom_categories.rs` - Using custom operation categories
-- `async_profiling.rs` - Profiling async code with enums
-- `trading_system.rs` - High-frequency trading system example
-
-Run examples with:
-
-```bash
-cargo run --example basic
-cargo run --example custom_categories
-cargo run --example async_profiling
-cargo run --example trading_system
-```
 
 ## Benchmarks
 
@@ -469,37 +432,6 @@ This project is licensed under either of
 
 at your option.
 
-## Migration from Conditional Compilation
-
-If you're currently using `#[cfg(feature = "...")]` for profiling, Quantum Pulse eliminates that need:
-
-### Before (with conditionals and strings)
-```rust
-#[cfg(feature = "profiling")]
-let timer = Timer::start("operation");
-
-let result = do_work();
-
-#[cfg(feature = "profiling")]
-timer.stop();
-```
-
-### After (with Quantum Pulse and type-safe enums)
-```rust
-#[derive(Debug)]
-enum AppOperation {
-    WorkOperation,
-}
-
-impl Operation for AppOperation {}
-
-let result = profile!(AppOperation::WorkOperation, {
-    do_work()
-});
-```
-
-The same clean code works in both production (zero-cost) and development (full profiling).
-
 ## Acknowledgments
 
-This library was designed for high-performance applications requiring microsecond-precision profiling, where traditional sampling profilers lack the necessary granularity and CPU performance counters provide excessive detail.
+This library was designed for high-performance applications requiring microsecond-precision profiling with minimal overhead and maximum ergonomics.

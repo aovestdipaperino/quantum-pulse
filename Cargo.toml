@@ -1,6 +1,6 @@
 [package]
 name = "quantum-pulse"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = ["Enzo Lombardi <enzinol@gmail.com>"]
 description = "A lightweight, customizable profiling library for Rust with support for custom categories and percentile statistics"
@@ -11,13 +11,23 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["profiling", "performance", "metrics", "timing", "statistics"]
 categories = ["development-tools::profiling", "development-tools::debugging"]
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-*",
+    "CHANGELOG.md",
+    "logo.png",
+]
 
 [dependencies]
 hdrhistogram = { version = "7.5", optional = true }
+quantum-pulse-macros = { version = "0.1.5", path = "quantum-pulse-macros", optional = true }
 
 [features]
 default = []
-full = ["hdrhistogram"]
+full = ["hdrhistogram", "quantum-pulse-macros"]
+macros = ["quantum-pulse-macros"]
 
 [dev-dependencies]
 criterion = "0.5"
@@ -35,3 +45,6 @@ name = "async_profiling"
 
 [[example]]
 name = "trading_system"
+
+[workspace]
+members = [".", "quantum-pulse-macros"]

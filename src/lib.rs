@@ -365,6 +365,10 @@ pub use collector::{OperationStats, ProfileCollector, SummaryStats};
 pub use operation::Operation;
 pub use timer::{PausableTimer, ProfileTimer, ProfileTimerAsync};
 
+// Re-export the Operation derive macro when available
+#[cfg(any(feature = "macros", feature = "full"))]
+pub use quantum_pulse_macros::Operation as ProfileOp;
+
 /// Profile a code block using RAII timer
 ///
 /// This macro creates a RAII timer that automatically records the duration
