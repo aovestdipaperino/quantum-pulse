@@ -1,6 +1,6 @@
 [package]
 name = "quantum-pulse-macros"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Enzo Lombardi <enzinol@gmail.com>"]
 description = "Procedural macros for the quantum-pulse profiling library"
