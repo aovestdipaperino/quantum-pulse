@@ -62,11 +62,6 @@ pub trait Operation: Debug + Send + Sync {
 ///
 /// This is a convenience type for when you don't need custom categories
 /// or complex operation types.
-
-/// A categorized operation implementation
-///
-/// This is a convenience type for when you want to specify both
-/// an operation name and a category without defining custom types.
 pub struct CategorizedOperation {
     pub name: String,
     pub category: Box<dyn Category>,

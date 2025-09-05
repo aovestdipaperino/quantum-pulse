@@ -114,7 +114,7 @@ pub fn derive_operation(input: TokenStream) -> TokenStream {
         }
 
         // Determine the category name (default to empty string if not specified)
-        let final_category_name = category_name.unwrap_or_else(|| String::new());
+        let final_category_name = category_name.unwrap_or_else(String::new);
 
         // Only update the category info if it hasn't been defined yet or if this one has a description
         if !categories.contains_key(&final_category_name) {

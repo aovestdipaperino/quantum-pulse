@@ -269,6 +269,7 @@ fn test_empty_enum() {
 
 #[test]
 fn test_single_variant_enum() {
+    quantum_pulse::ProfileCollector::clear_all();
     #[derive(Debug, ProfileOp)]
     enum SingleOp {
         #[category(name = "Single", description = "Single operation")]

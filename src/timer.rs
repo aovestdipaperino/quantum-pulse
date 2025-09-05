@@ -149,23 +149,21 @@ impl<'a> ProfileTimerAsync<'a> {
     }
 
     /// Run an async operation and record its duration
-    pub fn run<F, R>(self, fut: F) -> impl std::future::Future<Output = R> + 'a
+    pub async fn run<F, R>(self, fut: F) -> R
     where
         F: std::future::Future<Output = R> + 'a,
     {
-        async move {
-            let result = fut.await;
-            let elapsed = self.start_time.elapsed();
+        let result = fut.await;
+        let elapsed = self.start_time.elapsed();
 
-            let key = format!(
-                "{}::{}",
-                self.operation.get_category().get_name(),
-                self.operation.to_str()
-            );
-            ProfileCollector::record(&key, elapsed.as_micros() as u64);
+        let key = format!(
+            "{}::{}",
+            self.operation.get_category().get_name(),
+            self.operation.to_str()
+        );
+        ProfileCollector::record(&key, elapsed.as_micros() as u64);
 
-            result
-        }
+        result
     }
 
     /// Get the operation being timed

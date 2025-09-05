@@ -171,7 +171,7 @@ impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ProfileReport
         // Summary
         if self.config.include_summary {
             output.push_str(&self.format_summary());
-            output.push_str("\n");
+            output.push('\n');
         }
 
         // Operations - disable categorization if no categories are available
