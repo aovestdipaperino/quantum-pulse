@@ -62,8 +62,8 @@ pub mod collector;
 // pub mod metrics;
 #[cfg(feature = "full")]
 pub mod operation;
-// #[cfg(feature = "full")]
-// pub mod reporter;
+#[cfg(feature = "full")]
+pub mod reporter;
 #[cfg(feature = "full")]
 pub mod timer;
 
@@ -365,8 +365,15 @@ pub use collector::{OperationStats, ProfileCollector, SummaryStats};
 pub use operation::Operation;
 pub use timer::{PausableTimer, ProfileTimer, ProfileTimerAsync};
 
-// Re-export the Operation derive macro when available
-#[cfg(any(feature = "macros", feature = "full"))]
+// Re-export reporter functionality when full feature is enabled
+#[cfg(feature = "full")]
+pub use category::DefaultCategory;
+#[cfg(feature = "full")]
+pub use reporter::{
+    Percentile, ProfileReport, ReportBuilder, ReportConfig, SortMetric, TimeFormat,
+};
+
+// Re-export the Operation derive macro (always available)
 pub use quantum_pulse_macros::Operation as ProfileOp;
 
 /// Profile a code block using RAII timer
@@ -498,7 +505,7 @@ mod tests {
         assert_eq!(result, 42);
         assert!(ProfileCollector::has_data());
 
-        let stats = ProfileCollector::get_stats("NoCategory::test_operation");
+        let stats = ProfileCollector::get_stats("test_operation");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
@@ -587,7 +594,7 @@ mod tests {
         });
 
         assert_eq!(result, 100);
-        assert!(ProfileCollector::get_stats("NoCategory::macro_test").is_some());
+        assert!(ProfileCollector::get_stats("macro_test").is_some());
     }
 
     #[test]
@@ -613,6 +620,6 @@ mod tests {
         }
 
         assert!(ProfileCollector::has_data());
-        assert!(ProfileCollector::get_stats("NoCategory::scoped_test").is_some());
+        assert!(ProfileCollector::get_stats("scoped_test").is_some());
     }
 }

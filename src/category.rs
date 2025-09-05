@@ -60,7 +60,7 @@ pub struct NoCategory;
 
 impl Category for NoCategory {
     fn get_name(&self) -> &str {
-        "NoCategory"
+        ""
     }
 
     fn get_description(&self) -> &str {
@@ -76,6 +76,69 @@ impl Category for NoCategory {
     }
 }
 
+/// Default category enum for basic operation categorization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum DefaultCategory {
+    /// Input/Output operations (database, network, file system)
+    IO,
+    /// Computational operations (calculations, data processing)
+    Compute,
+    /// Memory operations (allocation, deallocation)
+    Memory,
+    /// System operations (OS calls, threading)
+    System,
+    /// User interface operations
+    UI,
+    /// General uncategorized operations
+    General,
+}
+
+impl Category for DefaultCategory {
+    fn get_name(&self) -> &str {
+        match self {
+            DefaultCategory::IO => "I/O",
+            DefaultCategory::Compute => "Compute",
+            DefaultCategory::Memory => "Memory",
+            DefaultCategory::System => "System",
+            DefaultCategory::UI => "UI",
+            DefaultCategory::General => "General",
+        }
+    }
+
+    fn get_description(&self) -> &str {
+        match self {
+            DefaultCategory::IO => "Input/Output operations (database, network, file system)",
+            DefaultCategory::Compute => "Computational operations (calculations, data processing)",
+            DefaultCategory::Memory => "Memory operations (allocation, deallocation)",
+            DefaultCategory::System => "System operations (OS calls, threading)",
+            DefaultCategory::UI => "User interface operations",
+            DefaultCategory::General => "General uncategorized operations",
+        }
+    }
+
+    fn color_hint(&self) -> Option<&str> {
+        Some(match self {
+            DefaultCategory::IO => "#3498db",      // Blue
+            DefaultCategory::Compute => "#e74c3c", // Red
+            DefaultCategory::Memory => "#f39c12",  // Orange
+            DefaultCategory::System => "#9b59b6",  // Purple
+            DefaultCategory::UI => "#2ecc71",      // Green
+            DefaultCategory::General => "#95a5a6", // Gray
+        })
+    }
+
+    fn priority(&self) -> i32 {
+        match self {
+            DefaultCategory::IO => 1,
+            DefaultCategory::Compute => 2,
+            DefaultCategory::Memory => 3,
+            DefaultCategory::System => 4,
+            DefaultCategory::UI => 5,
+            DefaultCategory::General => 999,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,11 +146,25 @@ mod tests {
     #[test]
     fn test_no_category() {
         let no_cat = NoCategory;
-        assert_eq!(no_cat.get_name(), "NoCategory");
+        assert_eq!(no_cat.get_name(), "");
         assert_eq!(
             no_cat.get_description(),
             "Default category when none is specified"
         );
+    }
+
+    #[test]
+    fn test_default_category() {
+        assert_eq!(DefaultCategory::IO.get_name(), "I/O");
+        assert_eq!(DefaultCategory::Compute.get_name(), "Compute");
+        assert_eq!(DefaultCategory::Memory.get_name(), "Memory");
+        assert_eq!(DefaultCategory::System.get_name(), "System");
+        assert_eq!(DefaultCategory::UI.get_name(), "UI");
+        assert_eq!(DefaultCategory::General.get_name(), "General");
+
+        assert!(DefaultCategory::IO.color_hint().is_some());
+        assert_eq!(DefaultCategory::IO.priority(), 1);
+        assert_eq!(DefaultCategory::General.priority(), 999);
     }
 
     #[test]

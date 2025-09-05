@@ -138,7 +138,7 @@ mod tests {
 
         let op = DefaultOp;
         let category = op.get_category();
-        assert_eq!(category.get_name(), "NoCategory");
+        assert_eq!(category.get_name(), "");
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
     fn test_categorized_operation_creation() {
         let op = CategorizedOperation::new("simple_test", Box::new(NoCategory));
         assert_eq!(op.to_str(), "simple_test");
-        assert_eq!(op.get_category().get_name(), "NoCategory");
+        assert_eq!(op.get_category().get_name(), "");
     }
 
     #[test]

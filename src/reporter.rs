@@ -116,7 +116,7 @@ pub struct ProfileReport<C: Category = crate::category::DefaultCategory> {
     generated_at: std::time::SystemTime,
 }
 
-impl<C: Category> ProfileReport<C> {
+impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ProfileReport<C> {
     /// Generate a report with default configuration
     pub fn generate() -> Self {
         Self::generate_with_config(ReportConfig::default())
@@ -174,8 +174,9 @@ impl<C: Category> ProfileReport<C> {
             output.push_str("\n");
         }
 
-        // Operations
-        if self.config.group_by_category {
+        // Operations - disable categorization if no categories are available
+        let has_categories = !self.categories.is_empty();
+        if self.config.group_by_category && has_categories {
             output.push_str(&self.format_by_category());
         } else {
             output.push_str(&self.format_all_operations());
@@ -204,20 +205,22 @@ impl<C: Category> ProfileReport<C> {
                 .format_time(summary.total_time_micros)
         ));
 
-        if !summary.slowest_operation.is_empty() {
+        if let Some(ref slowest) = summary.slowest_operation {
+            let clean_name = slowest.strip_prefix("None::").unwrap_or(slowest);
             output.push_str(&format!(
-                "Slowest Operation: {} (p99: {})\n",
-                summary.slowest_operation,
+                "  📊 Slowest operation: {} (p99: {})\n",
+                clean_name,
                 self.config
                     .time_format
                     .format_time(summary.slowest_p99_micros)
             ));
         }
 
-        if !summary.busiest_operation.is_empty() {
+        if let Some(ref busiest) = summary.busiest_operation {
+            let clean_name = busiest.strip_prefix("None::").unwrap_or(busiest);
             output.push_str(&format!(
-                "Busiest Operation: {} ({} calls)\n",
-                summary.busiest_operation, summary.busiest_count
+                "  🔥 Busiest operation: {} ({} calls)\n",
+                clean_name, summary.busiest_count
             ));
         }
 
@@ -226,21 +229,31 @@ impl<C: Category> ProfileReport<C> {
 
     fn format_by_category(&self) -> String {
         let mut output = String::new();
+
+        // If no categories are available, show a simple message and fall back to flat list
+        if self.categories.is_empty() {
+            output.push_str("═══ All Operations ═══\n");
+            output.push_str("(No categories configured - showing flat list)\n\n");
+            return self.format_all_operations();
+        }
+
         let mut categorized: HashMap<C, Vec<(&String, &OperationStats)>> = HashMap::new();
 
         // Group operations by category
         for (operation, stats) in &self.stats {
-            if stats.count < self.config.min_samples && !self.config.include_empty {
+            if stats.count < self.config.min_samples as usize && !self.config.include_empty {
                 continue;
             }
 
-            let category = self.categories.get(operation).cloned().unwrap_or_else(|| {
-                ProfileCollector::get_category::<_, C>(operation).unwrap_or_else(|| {
-                    // This is a bit of a hack - we need a default category
-                    // In real usage, every operation should have a category
-                    panic!("Operation {} has no category", operation)
-                })
-            });
+            // Skip operations that don't have categories - don't panic
+            let category = match self.categories.get(operation).cloned() {
+                Some(cat) => cat,
+                None => {
+                    // If no category is found, skip this operation in categorized view
+                    // This prevents panics when operations don't have categories assigned
+                    continue;
+                }
+            };
 
             categorized
                 .entry(category)
@@ -248,16 +261,22 @@ impl<C: Category> ProfileReport<C> {
                 .push((operation, stats));
         }
 
+        // If no operations were categorized, fall back to flat operation list
+        if categorized.is_empty() {
+            output.push_str("═══ All Operations ═══\n");
+            output.push_str("(No operations could be categorized - showing flat list)\n\n");
+            return self.format_all_operations();
+        }
+
         // Sort categories by priority
-        let mut categories: Vec<_> = categorized.keys().cloned().collect();
+        let mut categories: Vec<C> = categorized.keys().cloned().collect();
         categories.sort_by_key(|c| c.priority());
 
-        // Format each category
         for category in categories {
             if let Some(operations) = categorized.get(&category) {
-                output.push_str(&format!("\n═══ {:?} ═══\n", category));
-                if let Some(desc) = category.description() {
-                    output.push_str(&format!("  {}\n", desc));
+                output.push_str(&format!("\n═══ {} ═══\n", category.get_name()));
+                if !category.get_description().is_empty() {
+                    output.push_str(&format!("  {}\n", category.get_description()));
                 }
                 output.push_str(&self.format_operations_table(operations));
             }
@@ -271,7 +290,7 @@ impl<C: Category> ProfileReport<C> {
             .stats
             .iter()
             .filter(|(_, stats)| {
-                stats.count >= self.config.min_samples || self.config.include_empty
+                stats.count >= self.config.min_samples as usize || self.config.include_empty
             })
             .collect();
 
@@ -288,27 +307,25 @@ impl<C: Category> ProfileReport<C> {
         // Sort operations
         if self.config.sort_by_time {
             sorted_ops.sort_by(|a, b| {
-                b.1.mean_time_micros
-                    .partial_cmp(&a.1.mean_time_micros)
+                b.1.mean_time_micros()
+                    .partial_cmp(&a.1.mean_time_micros())
                     .unwrap()
             });
         } else if let Some(percentile) = self.config.sort_by_percentile {
             match percentile {
                 Percentile::P50 => {
-                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p50_micros))
+                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p50_micros()))
                 }
                 Percentile::P95 => {
-                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p95_micros))
+                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p95_micros()));
                 }
                 Percentile::P99 => {
-                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p99_micros))
+                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p99_micros()));
                 }
                 Percentile::P999 => {
-                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p999_micros))
+                    sorted_ops.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p999_micros()));
                 }
             }
-        } else {
-            sorted_ops.sort_by_key(|(name, _)| name.as_str());
         }
 
         // Apply max operations limit
@@ -320,46 +337,48 @@ impl<C: Category> ProfileReport<C> {
 
         // Table header
         if self.config.include_percentiles {
-            output.push_str("  Operation                          Count      Mean       P50        P95        P99        P99.9\n");
-            output.push_str("  ─────────────────────────────────────────────────────────────────────────────────────────────\n");
+            output.push_str("  Operation                          |   Count |        Mean |         P50 |         P95 |         P99 |       P99.9\n");
+            output.push_str("  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────\n");
         } else {
             output.push_str(
-                "  Operation                          Count      Mean       Min        Max\n",
+                "  Operation                          |   Count |        Mean |         Min |         Max\n",
             );
             output.push_str(
-                "  ──────────────────────────────────────────────────────────────────────\n",
+                "  ─────────────────────────────────────────────────────────────────────────────────────────\n",
             );
         }
 
         // Table rows
         for (operation, stats) in sorted_ops {
-            let name = if operation.len() > 35 {
-                format!("{}...", &operation[..32])
+            // Clean up the "None::" prefix and format properly
+            let clean_operation = operation.strip_prefix("None::").unwrap_or(operation);
+            let name = if clean_operation.len() > 33 {
+                format!("{}...", &clean_operation[..30])
             } else {
-                format!("{:?}", operation)
+                clean_operation.to_string()
             };
 
             if self.config.include_percentiles {
                 output.push_str(&format!(
-                    "  {:<35} {:>8} {:>10} {:>10} {:>10} {:>10} {:>10}\n",
-                    name,
+                    "{:<34} | {:>7} | {:>11} | {:>11} | {:>11} | {:>11} | {:>11}\n",
+                    format!("\"{}\"", name),
                     stats.count,
                     self.config
                         .time_format
-                        .format_time_f64(stats.mean_time_micros),
-                    self.config.time_format.format_time(stats.p50_micros),
-                    self.config.time_format.format_time(stats.p95_micros),
-                    self.config.time_format.format_time(stats.p99_micros),
-                    self.config.time_format.format_time(stats.p999_micros),
+                        .format_time(stats.mean_time_micros()),
+                    self.config.time_format.format_time(stats.p50_micros()),
+                    self.config.time_format.format_time(stats.p95_micros()),
+                    self.config.time_format.format_time(stats.p99_micros()),
+                    self.config.time_format.format_time(stats.p999_micros()),
                 ));
             } else {
                 output.push_str(&format!(
-                    "  {:<35} {:>8} {:>10} {:>10} {:>10}\n",
-                    name,
+                    "{:<34} | {:>7} | {:>11} | {:>11} | {:>11}\n",
+                    format!("\"{}\"", name),
                     stats.count,
                     self.config
                         .time_format
-                        .format_time_f64(stats.mean_time_micros),
+                        .format_time(stats.mean_time_micros()),
                     self.config.time_format.format_time(stats.min_time_micros),
                     self.config.time_format.format_time(stats.max_time_micros),
                 ));
@@ -382,7 +401,7 @@ impl<C: Category> ProfileReport<C> {
 
         // Data rows
         for (name, stats) in operations {
-            if stats.count < self.config.min_samples && !self.config.include_empty {
+            if stats.count < self.config.min_samples as usize && !self.config.include_empty {
                 continue;
             }
 
@@ -397,14 +416,14 @@ impl<C: Category> ProfileReport<C> {
                 name,
                 category,
                 stats.count,
-                stats.mean_time_micros,
+                stats.mean_time_micros(),
                 stats.min_time_micros,
                 stats.max_time_micros,
-                stats.p50_micros,
-                stats.p95_micros,
-                stats.p99_micros,
-                stats.p999_micros,
-                stats.std_dev_micros,
+                stats.p50_micros(),
+                stats.p95_micros(),
+                stats.p99_micros(),
+                stats.p999_micros(),
+                stats.std_dev_micros(),
             ));
         }
 
@@ -428,21 +447,24 @@ impl<C: Category> ProfileReport<C> {
                 operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.count))
             }
             SortMetric::TotalTime => {
-                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.total_time_micros))
+                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.total_time_micros()))
             }
             SortMetric::MeanTime => operations.sort_by(|a, b| {
-                b.1.mean_time_micros
-                    .partial_cmp(&a.1.mean_time_micros)
+                b.1.mean_time_micros()
+                    .partial_cmp(&a.1.mean_time_micros())
                     .unwrap()
             }),
             SortMetric::P50 => {
-                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p50_micros))
+                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p50_micros()))
             }
             SortMetric::P95 => {
-                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p95_micros))
+                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p95_micros()))
             }
             SortMetric::P99 => {
-                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p99_micros))
+                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p99_micros()))
+            }
+            SortMetric::P999 => {
+                operations.sort_by_key(|(_, stats)| std::cmp::Reverse(stats.p999_micros()))
             }
         }
 
@@ -451,7 +473,9 @@ impl<C: Category> ProfileReport<C> {
     }
 }
 
-impl<C: Category> fmt::Display for ProfileReport<C> {
+impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> fmt::Display
+    for ProfileReport<C>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_console_string())
     }
@@ -466,6 +490,7 @@ pub enum SortMetric {
     P50,
     P95,
     P99,
+    P999,
 }
 
 /// Builder for creating customized reports
@@ -474,7 +499,7 @@ pub struct ReportBuilder<C: Category = crate::category::DefaultCategory> {
     _phantom: std::marker::PhantomData<C>,
 }
 
-impl<C: Category> ReportBuilder<C> {
+impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ReportBuilder<C> {
     /// Create a new report builder
     pub fn new() -> Self {
         Self {
@@ -543,7 +568,7 @@ impl<C: Category> ReportBuilder<C> {
     }
 }
 
-impl<C: Category> Default for ReportBuilder<C> {
+impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> Default for ReportBuilder<C> {
     fn default() -> Self {
         Self::new()
     }

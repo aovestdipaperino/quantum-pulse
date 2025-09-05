@@ -76,11 +76,8 @@ impl<'a> ProfileTimer<'a> {
     /// Manually record the timer (usually done automatically on drop)
     pub fn record(&mut self) {
         if !self.recorded {
-            let key = format!(
-                "{}::{}",
-                self.operation.get_category().get_name(),
-                self.operation.to_str()
-            );
+            let category_name = self.operation.get_category().get_name();
+            let key = format!("{}::{}", category_name, self.operation.to_str());
             ProfileCollector::record(&key, self.elapsed_micros());
             self.recorded = true;
         }
@@ -399,7 +396,7 @@ mod tests {
         }
 
         assert!(ProfileCollector::has_data());
-        let stats = ProfileCollector::get_stats("NoCategory::test_operation");
+        let stats = ProfileCollector::get_stats("test_operation");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
@@ -450,7 +447,7 @@ mod tests {
 
         assert!(duration.as_millis() >= 1);
         assert!(ProfileCollector::has_data());
-        let stats = ProfileCollector::get_stats("NoCategory::stop_and_record_op");
+        let stats = ProfileCollector::get_stats("stop_and_record_op");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
@@ -489,7 +486,7 @@ mod tests {
         drop(timer);
 
         assert!(ProfileCollector::has_data());
-        let stats = ProfileCollector::get_stats("NoCategory::test_pausable");
+        let stats = ProfileCollector::get_stats("test_pausable");
         assert!(stats.is_some());
     }
 
@@ -533,7 +530,7 @@ mod tests {
 
         drop(timer);
 
-        let stats = ProfileCollector::get_stats("NoCategory::manual_record");
+        let stats = ProfileCollector::get_stats("manual_record");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
