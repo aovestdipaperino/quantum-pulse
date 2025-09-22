@@ -312,6 +312,50 @@ let result = profile!(AppOp::ImportantWork, {
 | Stub (default) | **Zero** - methods are empty and inlined away | Production |
 | Full | ~200-300ns per operation | Development, debugging |
 
+## Pause/Unpause Profiling
+
+Control profiling dynamically with `pause!()` and `unpause!()` macros:
+
+```rust
+use quantum_pulse::{profile, pause, unpause, ProfileOp};
+
+#[derive(Debug, ProfileOp)]
+enum AppOperation {
+    #[category(name = "Core")]
+    CriticalWork,
+    #[category(name = "Debug")]
+    DiagnosticWork,
+}
+
+// Normal profiling - operations are recorded
+profile!(AppOperation::CriticalWork, {
+    perform_important_work();
+});
+
+// Pause all profiling
+pause!();
+
+// This won't be recorded
+profile!(AppOperation::DiagnosticWork, {
+    debug_operations();
+});
+
+// Resume profiling
+unpause!();
+
+// This will be recorded again
+profile!(AppOperation::CriticalWork, {
+    more_important_work();
+});
+```
+
+### Use Cases
+
+- **Exclude initialization/cleanup** from performance measurements
+- **Focus profiling on specific sections** during debugging
+- **Reduce overhead** during non-critical operations
+- **Selective measurement** in loops or batch operations
+
 ## Migration Guide
 
 ### From String-based Profiling

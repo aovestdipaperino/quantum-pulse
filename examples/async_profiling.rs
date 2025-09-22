@@ -426,7 +426,8 @@ async fn orchestrate_services() {
     profile_async!(coord_op, async {
         simulate_async_work(50).await;
         println!("     Services coordinated");
-    });
+    })
+    .await;
 
     // Workflow orchestration
     let workflow_op = AsyncOperation::WorkflowOrchestration;
@@ -434,16 +435,19 @@ async fn orchestrate_services() {
         // Simulate complex workflow
         for step in 1..=3 {
             simulate_async_work(30).await;
-            println!("     Workflow step {} complete", step);
+            println!("       Workflow step {} completed", step);
         }
-    });
+        println!("     Workflow orchestration complete");
+    })
+    .await;
 
     // Complex analysis
     let analysis_op = AsyncOperation::ComplexAnalysis;
     profile_async!(analysis_op, async {
         simulate_async_work(80).await;
         println!("     Complex analysis complete");
-    });
+    })
+    .await;
 
     println!("   Service orchestration complete");
 }

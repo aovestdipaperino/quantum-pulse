@@ -1,9 +1,7 @@
-#![allow(unused_must_use)]
-
 //! # Quantum Pulse - Zero-Cost Profiling Library
 //!
-//! A profiling library that provides true zero-cost abstractions through compile-time
-//! feature selection. When disabled, all profiling code compiles to nothing.
+//! Zero-cost profiling through compile-time feature selection.
+//! When disabled, all profiling code compiles to nothing.
 //!
 //! ## Architecture
 //!
@@ -173,6 +171,16 @@ pub mod collector {
             SummaryStats::default()
         }
         pub fn report_stats() {}
+
+        pub fn pause() {}
+
+        pub fn unpause() {}
+
+        pub fn is_paused() -> bool {
+            false
+        }
+
+        pub fn reset_pause_state() {}
     }
 
     #[derive(Debug, Default)]
@@ -344,7 +352,6 @@ pub mod timer {
             }
         }
 
-        #[allow(unused_must_use)]
         pub async fn run<F, R>(self, fut: F) -> R
         where
             F: std::future::Future<Output = R>,
@@ -357,23 +364,86 @@ pub mod timer {
     pub struct PausableTimer<'a> {
         _operation: &'a dyn Operation,
     }
+
+    impl<'a> PausableTimer<'a> {
+        pub fn new(operation: &'a dyn Operation) -> Self {
+            Self {
+                _operation: operation,
+            }
+        }
+
+        pub fn new_paused(operation: &'a dyn Operation) -> Self {
+            Self {
+                _operation: operation,
+            }
+        }
+
+        pub fn pause(&mut self) {}
+
+        pub fn resume(&mut self) {}
+
+        pub fn total_elapsed(&self) -> std::time::Duration {
+            std::time::Duration::ZERO
+        }
+
+        pub fn total_elapsed_micros(&self) -> u64 {
+            0
+        }
+
+        pub fn total_elapsed_millis(&self) -> u64 {
+            0
+        }
+
+        pub fn is_running(&self) -> bool {
+            false
+        }
+
+        pub fn operation(&self) -> &dyn Operation {
+            self._operation
+        }
+
+        pub fn record(&mut self) {}
+
+        pub fn stop(self) -> std::time::Duration {
+            std::time::Duration::ZERO
+        }
+
+        pub fn stop_and_record(self) -> std::time::Duration {
+            std::time::Duration::ZERO
+        }
+
+        pub fn reset(&mut self) {}
+
+        pub fn reset_paused(&mut self) {}
+    }
+
+    impl<'a> Drop for PausableTimer<'a> {
+        fn drop(&mut self) {}
+    }
 }
 
 // Re-export the appropriate implementations based on feature flags
+#[doc(inline)]
 pub use category::{Category, NoCategory};
+#[doc(inline)]
 pub use collector::{OperationStats, ProfileCollector, SummaryStats};
+#[doc(inline)]
 pub use operation::Operation;
+#[doc(inline)]
 pub use timer::{PausableTimer, ProfileTimer, ProfileTimerAsync};
 
 // Re-export reporter functionality when full feature is enabled
 #[cfg(feature = "full")]
+#[doc(inline)]
 pub use category::DefaultCategory;
 #[cfg(feature = "full")]
+#[doc(inline)]
 pub use reporter::{
     Percentile, ProfileReport, ReportBuilder, ReportConfig, SortMetric, TimeFormat,
 };
 
 // Re-export the Operation derive macro (always available)
+// Note: External crate, so not using #[doc(inline)] per guidelines
 pub use quantum_pulse_macros::Operation as ProfileOp;
 
 /// Profile a code block using RAII timer
@@ -476,6 +546,100 @@ macro_rules! scoped_timer {
     };
 }
 
+/// Pause all active profiling timers globally
+///
+/// When profiling is paused, all new timing measurements will be ignored.
+/// Existing timers will continue running but won't record their results when dropped.
+/// This affects all `profile!()`, `profile_async!()`, and `scoped_timer!()` operations.
+///
+/// # Example
+/// ```rust
+/// use quantum_pulse::{profile, pause, unpause, Operation};
+/// use std::fmt::Debug;
+///
+/// #[derive(Debug)]
+/// enum AppOperation {
+///     CriticalWork,
+///     NonCriticalWork,
+/// }
+///
+/// impl Operation for AppOperation {}
+///
+/// # fn perform_critical_work() {}
+/// # fn perform_non_critical_work() {}
+/// # fn perform_more_critical_work() {}
+///
+/// // This will be recorded normally
+/// profile!(AppOperation::CriticalWork, {
+///     perform_critical_work();
+/// });
+///
+/// // Pause profiling
+/// pause!();
+///
+/// // This won't be recorded
+/// profile!(AppOperation::NonCriticalWork, {
+///     perform_non_critical_work();
+/// });
+///
+/// // Resume profiling
+/// unpause!();
+///
+/// // This will be recorded again
+/// profile!(AppOperation::CriticalWork, {
+///     perform_more_critical_work();
+/// });
+/// ```
+#[macro_export]
+macro_rules! pause {
+    () => {
+        $crate::ProfileCollector::pause();
+    };
+}
+
+/// Resume all paused profiling timers globally
+///
+/// After resuming, new timing measurements will be recorded normally.
+/// This affects all `profile!()`, `profile_async!()`, and `scoped_timer!()` operations.
+///
+/// # Example
+/// ```rust
+/// use quantum_pulse::{profile, pause, unpause, Operation};
+/// use std::fmt::Debug;
+///
+/// #[derive(Debug)]
+/// enum AppOperation {
+///     ImportantWork,
+/// }
+///
+/// impl Operation for AppOperation {}
+///
+/// # fn some_work() {}
+/// # fn more_work() {}
+///
+/// // Pause profiling
+/// pause!();
+///
+/// // This won't be recorded
+/// profile!(AppOperation::ImportantWork, {
+///     some_work();
+/// });
+///
+/// // Resume profiling
+/// unpause!();
+///
+/// // This will be recorded
+/// profile!(AppOperation::ImportantWork, {
+///     more_work();
+/// });
+/// ```
+#[macro_export]
+macro_rules! unpause {
+    () => {
+        $crate::ProfileCollector::unpause();
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,7 +669,7 @@ mod tests {
         assert_eq!(result, 42);
         assert!(ProfileCollector::has_data());
 
-        let stats = ProfileCollector::get_stats("test_operation");
+        let stats = ProfileCollector::get_stats("::test_operation");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
@@ -594,7 +758,7 @@ mod tests {
         });
 
         assert_eq!(result, 100);
-        assert!(ProfileCollector::get_stats("macro_test").is_some());
+        assert!(ProfileCollector::get_stats("::macro_test").is_some());
     }
 
     #[test]
@@ -602,24 +766,83 @@ mod tests {
     fn test_scoped_timer() {
         ProfileCollector::clear_all();
 
+        #[derive(Debug)]
+        enum TestOperation {
+            ScopedTest,
+        }
+
+        impl Operation for TestOperation {
+            fn to_str(&self) -> String {
+                "scoped_test".to_string()
+            }
+        }
+
+        let op = TestOperation::ScopedTest;
         {
-            #[derive(Debug)]
-            enum TestOperation {
-                ScopedTest,
-            }
-
-            impl Operation for TestOperation {
-                fn to_str(&self) -> String {
-                    "scoped_test".to_string()
-                }
-            }
-
-            let op = TestOperation::ScopedTest;
             scoped_timer!(op);
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
 
         assert!(ProfileCollector::has_data());
-        assert!(ProfileCollector::get_stats("scoped_test").is_some());
+        let stats = ProfileCollector::get_stats("::scoped_test");
+        assert!(stats.is_some());
+    }
+
+    #[test]
+    #[cfg(feature = "full")]
+    fn test_pause_unpause() {
+        ProfileCollector::clear_all();
+
+        #[derive(Debug)]
+        enum TestOperation {
+            PauseTest,
+        }
+
+        impl Operation for TestOperation {
+            fn to_str(&self) -> String {
+                "pause_test".to_string()
+            }
+        }
+
+        let op = TestOperation::PauseTest;
+
+        // Ensure profiling is not paused initially
+        unpause!();
+        assert!(!ProfileCollector::is_paused());
+
+        // Record something normally
+        profile!(op, {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        });
+
+        let stats_before_pause = ProfileCollector::get_stats("::pause_test");
+        assert!(stats_before_pause.is_some());
+        let count_before = stats_before_pause.unwrap().count;
+
+        // Pause profiling
+        pause!();
+        assert!(ProfileCollector::is_paused());
+
+        // This should not be recorded
+        profile!(op, {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        });
+
+        let stats_during_pause = ProfileCollector::get_stats("::pause_test");
+        assert!(stats_during_pause.is_some());
+        assert_eq!(stats_during_pause.unwrap().count, count_before);
+
+        // Resume profiling
+        unpause!();
+        assert!(!ProfileCollector::is_paused());
+
+        // This should be recorded again
+        profile!(op, {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        });
+
+        let stats_after_unpause = ProfileCollector::get_stats("::pause_test");
+        assert!(stats_after_unpause.is_some());
+        assert_eq!(stats_after_unpause.unwrap().count, count_before + 1);
     }
 }

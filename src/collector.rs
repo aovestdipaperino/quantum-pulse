@@ -1,6 +1,6 @@
 //! # Profile Collector
 //!
-//! Centralized collection and storage of profiling metrics with thread-safe access.
+//! Thread-safe centralized storage for profiling metrics.
 
 use crate::category::{Category, DefaultCategory};
 use std::collections::HashMap;
@@ -32,6 +32,9 @@ impl Default for OperationStats {
             count: 0,
             total: Duration::ZERO,
             #[cfg(feature = "full")]
+            // Precision of 3 gives us microsecond accuracy (up to ~2.1 seconds max)
+            // with 1‰ (0.1%) relative error and reasonable memory usage (~2KB per histogram).
+            // Falls back to precision 1 if allocation fails (extremely rare).
             histogram: Histogram::new(3).unwrap_or_else(|_| Histogram::new(1).unwrap()),
             min_time_micros: u64::MAX,
             max_time_micros: 0,
@@ -149,12 +152,20 @@ static GLOBAL_STATS: LazyLock<Arc<RwLock<HashMap<String, OperationStats>>>> =
 static GLOBAL_CATEGORIES: LazyLock<Arc<RwLock<HashMap<String, DefaultCategory>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
+/// Global pause state for all profiling operations
+static GLOBAL_PAUSED: LazyLock<Arc<RwLock<bool>>> = LazyLock::new(|| Arc::new(RwLock::new(false)));
+
 /// Central collector for all profiling data
 pub struct ProfileCollector;
 
 impl ProfileCollector {
     /// Record a timing measurement for an operation
     pub fn record(key: &str, duration_micros: u64) {
+        // Skip recording if globally paused
+        if Self::is_paused() {
+            return;
+        }
+
         let duration = Duration::from_micros(duration_micros);
 
         #[cfg(feature = "full")]
@@ -259,6 +270,7 @@ impl ProfileCollector {
     /// Clear all data
     pub fn clear_all() {
         Self::reset_all();
+        Self::reset_pause_state();
     }
 
     /// Record a timing measurement with a category
@@ -306,6 +318,46 @@ impl ProfileCollector {
         #[cfg(not(feature = "full"))]
         {
             let _ = key;
+        }
+    }
+
+    /// Pause all profiling operations globally
+    ///
+    /// When paused, all new timing measurements will be ignored.
+    /// Existing timers will continue running but won't record their results.
+    pub fn pause() {
+        if let Ok(mut paused) = GLOBAL_PAUSED.write() {
+            *paused = true;
+        }
+    }
+
+    /// Resume all profiling operations globally
+    ///
+    /// After resuming, new timing measurements will be recorded normally.
+    pub fn unpause() {
+        if let Ok(mut paused) = GLOBAL_PAUSED.write() {
+            *paused = false;
+        }
+    }
+
+    /// Check if profiling is currently paused
+    pub fn is_paused() -> bool {
+        if let Ok(paused) = GLOBAL_PAUSED.read() {
+            *paused
+        } else {
+            false
+        }
+    }
+
+    /// Reset the pause state to unpaused
+    ///
+    /// This is useful for tests to ensure clean state
+    pub fn reset_pause_state() {
+        #[cfg(feature = "full")]
+        {
+            if let Ok(mut paused) = GLOBAL_PAUSED.write() {
+                *paused = false;
+            }
         }
     }
 

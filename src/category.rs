@@ -1,7 +1,6 @@
 //! # Category Module
 //!
-//! Provides traits and types for categorizing profiling operations.
-//! Users can define their own categories by implementing the `Category` trait.
+//! Traits for organizing profiling operations into categories.
 
 /// Trait for defining custom profiling categories
 ///

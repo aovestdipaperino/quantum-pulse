@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2024-09-09
+
+### Added
+- **Pause/Unpause Profiling** - New macros for dynamic profiling control
+  - `pause!()` macro to globally pause all active profiling timers
+  - `unpause!()` macro to globally resume all paused profiling timers
+  - Global pause state management with thread-safe implementation
+  - `ProfileCollector::pause()`, `ProfileCollector::unpause()`, and `ProfileCollector::is_paused()` methods
+  - `ProfileCollector::reset_pause_state()` for test isolation
+  - Complete stub implementations for zero-cost abstractions in default mode
+
+### Added
+- **Enhanced PausableTimer** - Full implementation for fine-grained timing control
+  - `PausableTimer::new()` and `PausableTimer::new_paused()` constructors
+  - `pause()` and `resume()` methods for manual timer control
+  - `total_elapsed()`, `total_elapsed_micros()`, `total_elapsed_millis()` for elapsed time queries
+  - `is_running()` status check
+  - `stop()` and `stop_and_record()` for controlled timer termination
+  - `reset()` and `reset_paused()` for timer reinitialization
+  - Complete stub implementation for compatibility with default features
+
+### Added
+- **Network Time Exclusion Examples** - Comprehensive examples showing different approaches
+  - Method 1: Using `pause!()`/`unpause!()` macros for simple exclusions
+  - Method 2: Using `PausableTimer` for fine-grained control
+  - Method 3: Separate profiling by category (recommended approach)
+  - Method 4: Nested profiling with comprehensive categorization
+  - Real-world payment processing example demonstrating all methods
+
+### Documentation
+- Updated README.md with pause/unpause functionality section
+- Added advanced patterns section to USER-GUIDE.md with pause/unpause use cases
+- Comprehensive examples showing network time exclusion techniques
+- Added integration tests for pause/unpause functionality
+
+### Fixed
+- All compiler warnings eliminated across examples and library code
+- Fixed unused async futures in examples by properly awaiting them
+- Added appropriate `#[allow(dead_code)]` attributes for demonstration code
+- Complete compatibility between stub mode and full feature implementations
+
 ## [0.1.6] - 2024-09-05
 
 ### Improved

@@ -337,7 +337,8 @@ async fn handle_user_request(request_id: u32) {
         let payment_op = WebAppOperation::PaymentGatewayApi;
         profile_async!(payment_op, async {
             sleep(Duration::from_millis(80 + (request_id * 10) as u64)).await;
-        });
+        })
+        .await;
     }
 
     // Process payment (business logic)
@@ -374,7 +375,8 @@ async fn run_background_jobs() {
     profile_async!(warm_op, async {
         sleep(Duration::from_millis(50)).await;
         println!("  - Cache warmed");
-    });
+    })
+    .await;
 
     // File processing
     for i in 1..=2 {
@@ -390,14 +392,16 @@ async fn run_background_jobs() {
     profile_async!(sync_op, async {
         sleep(Duration::from_millis(120)).await;
         println!("  - CRM sync completed");
-    });
+    })
+    .await;
 
     // Send notifications
     let notify_op = WebAppOperation::SendNotification;
     profile_async!(notify_op, async {
         sleep(Duration::from_millis(15)).await;
         println!("  - Notifications sent");
-    });
+    })
+    .await;
 
     // Backup data
     let backup_op = WebAppOperation::BackupData;
@@ -585,7 +589,8 @@ mod tests {
         let op = WebAppOperation::PaymentGatewayApi;
         profile_async!(op, async {
             sleep(Duration::from_millis(1)).await;
-        });
+        })
+        .await;
 
         assert!(ProfileCollector::has_data());
         let stats = ProfileCollector::get_stats("ExternalAPI::payment_gateway_api");

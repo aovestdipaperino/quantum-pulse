@@ -26,6 +26,10 @@ use crate::operation::Operation;
 ///
 /// impl Operation for AppOperation {}
 ///
+/// # fn perform_database_query() {
+/// #     // Stub function for example
+/// # }
+///
 /// let operation = AppOperation::DatabaseQuery;
 /// {
 ///     let _timer = ProfileTimer::new(&operation);
@@ -126,6 +130,12 @@ impl<'a> Drop for ProfileTimer<'a> {
 ///
 /// impl Operation for AppOperation {}
 ///
+/// # async fn perform_async_database_query() -> String {
+/// #     // Stub function for example
+/// #     "query_result".to_string()
+/// # }
+/// #
+/// # async fn example() {
 /// let operation = AppOperation::AsyncDatabaseQuery;
 /// let timer = ProfileTimerAsync::new(&operation);
 ///
@@ -133,6 +143,7 @@ impl<'a> Drop for ProfileTimer<'a> {
 ///     // Your async code here
 ///     perform_async_database_query().await
 /// }).await;
+/// # }
 /// ```
 pub struct ProfileTimerAsync<'a> {
     operation: &'a dyn Operation,
@@ -396,7 +407,7 @@ mod tests {
         }
 
         assert!(ProfileCollector::has_data());
-        let stats = ProfileCollector::get_stats("test_operation");
+        let stats = ProfileCollector::get_stats("::test_operation");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
@@ -447,7 +458,7 @@ mod tests {
 
         assert!(duration.as_millis() >= 1);
         assert!(ProfileCollector::has_data());
-        let stats = ProfileCollector::get_stats("stop_and_record_op");
+        let stats = ProfileCollector::get_stats("::stop_and_record_op");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }
@@ -486,7 +497,7 @@ mod tests {
         drop(timer);
 
         assert!(ProfileCollector::has_data());
-        let stats = ProfileCollector::get_stats("test_pausable");
+        let stats = ProfileCollector::get_stats("::test_pausable");
         assert!(stats.is_some());
     }
 
@@ -530,7 +541,7 @@ mod tests {
 
         drop(timer);
 
-        let stats = ProfileCollector::get_stats("manual_record");
+        let stats = ProfileCollector::get_stats("::manual_record");
         assert!(stats.is_some());
         assert_eq!(stats.unwrap().count, 1);
     }

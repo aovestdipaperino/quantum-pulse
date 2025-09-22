@@ -7,6 +7,7 @@ use quantum_pulse::{profile, Operation, ProfileCollector, ProfileOp};
 
 // Define an enum with the Operation derive macro
 #[derive(Debug, ProfileOp)]
+#[allow(dead_code)]
 enum MyProfileOperation {
     // Category with both name and description
     #[category(name = "IO", description = "File system write operations")]

@@ -239,6 +239,7 @@ impl Operation for TradingOperation {
 
 /// Simulated order structure
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct Order {
     id: u64,
     symbol: String,
@@ -248,6 +249,7 @@ struct Order {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum OrderType {
     Market,
     Limit,
@@ -256,6 +258,7 @@ enum OrderType {
 
 /// Simulated market data
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct MarketData {
     symbol: String,
     bid: f64,
@@ -364,14 +367,16 @@ async fn process_trading_orders() {
         profile_async!(submission_op, async {
             sleep(Duration::from_micros(100)).await;
             println!("   📤 Order {} submitted to exchange", order.id);
-        });
+        })
+        .await;
 
         // Step 4: Simulate execution
         let execution_op = TradingOperation::OrderExecution;
         profile_async!(execution_op, async {
             sleep(Duration::from_micros(200)).await;
             println!("   ✅ Order {} executed", order.id);
-        });
+        })
+        .await;
 
         // Step 5: Confirm execution
         let confirmation_op = TradingOperation::OrderConfirmation;
@@ -435,8 +440,9 @@ async fn process_market_data() {
         profile_async!(volatility_op, async {
             sleep(Duration::from_micros(80)).await;
             let volatility = calculate_volatility(&data);
-            println!("   📈 Volatility for {}: {:.4}", data.symbol, volatility);
-        });
+            println!("   📈 Volatility for {}: {:.2}%", data.symbol, volatility);
+        })
+        .await;
 
         // Technical analysis
         let analysis_op = TradingOperation::TechnicalAnalysis;
@@ -462,7 +468,8 @@ async fn perform_risk_checks() {
     profile_async!(exposure_op, async {
         sleep(Duration::from_micros(200)).await;
         println!("   📊 Market exposure calculated");
-    });
+    })
+    .await;
 
     // Perform limit checks
     for limit_type in &["position_limit", "var_limit", "concentration_limit"] {
@@ -512,21 +519,24 @@ async fn manage_portfolio() {
     profile_async!(pnl_op, async {
         sleep(Duration::from_micros(300)).await;
         println!("   💰 PnL calculation completed: $125,430.50");
-    });
+    })
+    .await;
 
     // Portfolio rebalancing
     let rebalance_op = TradingOperation::RebalanceOperation;
     profile_async!(rebalance_op, async {
         sleep(Duration::from_millis(2)).await;
         println!("   ⚖️  Portfolio rebalanced");
-    });
+    })
+    .await;
 
     // Portfolio optimization
     let optimization_op = TradingOperation::PortfolioOptimization;
     profile_async!(optimization_op, async {
         sleep(Duration::from_millis(5)).await;
         println!("   🎯 Portfolio optimization completed");
-    });
+    })
+    .await;
 }
 
 async fn run_concurrent_trading_ops() {

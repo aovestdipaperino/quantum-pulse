@@ -1,7 +1,6 @@
 //! # Operation Module
 //!
-//! Provides the Operation trait for defining profiling operations.
-//! Operations can be categorized and provide string representations for profiling.
+//! Trait for defining categorizable profiling operations.
 
 use crate::category::{Category, NoCategory};
 use std::fmt::Debug;

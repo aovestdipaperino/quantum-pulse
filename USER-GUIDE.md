@@ -933,6 +933,91 @@ This hierarchical approach gives you:
 - **External dependency tracking**: Separate timing for external services
 - **Non-critical operation isolation**: Logging failures don't affect payment success
 
+### The Pause/Unpause Pattern
+
+Use `pause!()` and `unpause!()` to selectively control profiling during execution:
+
+```rust
+use quantum_pulse::{profile, pause, unpause, ProfileOp};
+
+#[derive(Debug, ProfileOp)]
+enum SystemOperation {
+    #[category(name = "Core", description = "Critical business logic")]
+    ProcessOrder,
+    
+    #[category(name = "Maintenance", description = "Background tasks")]
+    CacheWarming,
+    LogRotation,
+    
+    #[category(name = "Debug", description = "Diagnostic operations")]
+    HealthCheck,
+    MetricsCollection,
+}
+
+fn system_startup() {
+    // Don't profile initialization overhead
+    pause!();
+    
+    initialize_database_connections();
+    load_configuration();
+    setup_monitoring();
+    
+    // Start profiling the actual work
+    unpause!();
+    
+    // This gets profiled
+    profile!(SystemOperation::CacheWarming, {
+        warm_critical_caches();
+    });
+    
+    println!("System ready!");
+}
+
+fn batch_processing(orders: Vec<Order>) {
+    for (i, order) in orders.iter().enumerate() {
+        // Only profile every 10th order to reduce overhead
+        if i % 10 != 0 {
+            pause!();
+        }
+        
+        profile!(SystemOperation::ProcessOrder, {
+            process_order(order);
+        });
+        
+        if i % 10 != 0 {
+            unpause!();
+        }
+    }
+}
+
+fn debug_mode_handler() {
+    if !is_debug_mode() {
+        // In production, skip debug profiling
+        pause!();
+    }
+    
+    profile!(SystemOperation::HealthCheck, {
+        run_comprehensive_health_checks();
+    });
+    
+    profile!(SystemOperation::MetricsCollection, {
+        collect_detailed_metrics();
+    });
+    
+    if !is_debug_mode() {
+        unpause!();
+    }
+}
+```
+
+**Use Cases for Pause/Unpause:**
+
+- **Initialization exclusion**: Skip profiling setup/teardown code
+- **Sampling in loops**: Profile only representative iterations
+- **Debug-only operations**: Profile diagnostics only in debug builds
+- **Performance-critical sections**: Disable profiling overhead during ultra-fast paths
+- **Conditional profiling**: Enable/disable based on runtime conditions
+
 ### The Feature Flag Pattern
 
 Use Rust's feature system to enable detailed profiling only when needed:
