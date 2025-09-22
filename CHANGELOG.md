@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2024-12-22
+
+### Changed
+- **Documentation Improvements** - Full compliance with Rust API guidelines
+  - Removed global `#![allow(unused_must_use)]` lint suppression
+  - Added `#[doc(inline)]` attributes to all internal module re-exports for better API documentation
+  - Shortened all module-level documentation first sentences to under 15 words (M-FIRST-DOC-SENTENCE)
+  - Made all documentation examples fully compilable by adding stub functions
+  - Improved histogram precision documentation with detailed accuracy/memory tradeoffs
+
+### Fixed
+- Documentation examples now compile without `no_run` annotations
+- Module summaries now follow the 15-word guideline for better readability
+
 ## [0.1.7] - 2024-09-09
 
 ### Added
