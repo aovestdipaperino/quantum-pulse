@@ -113,8 +113,8 @@ pub fn derive_operation(input: TokenStream) -> TokenStream {
             }
         }
 
-        // Determine the category name (default to empty string if not specified)
-        let final_category_name = category_name.unwrap_or_else(|| String::new());
+        // Determine the category name (default to variant name if not specified)
+        let final_category_name = category_name.unwrap_or_else(|| format!("{}", variant_ident));
 
         // Only update the category info if it hasn't been defined yet or if this one has a description
         if !categories.contains_key(&final_category_name) {
@@ -122,23 +122,14 @@ pub fn derive_operation(input: TokenStream) -> TokenStream {
                 final_category_name.clone(),
                 CategoryInfo {
                     name: final_category_name.clone(),
-                    description: category_description.unwrap_or_else(|| {
-                        if final_category_name.is_empty() {
-                            format!("{}", variant_ident)
-                        } else {
-                            final_category_name.clone()
-                        }
-                    }),
+                    description: category_description.unwrap_or_else(|| final_category_name.clone()),
                 },
             );
         } else if category_description.is_some() {
             // If this category already exists but this variant provides a description,
             // only update if the existing one doesn't have a custom description
             let existing = categories.get(&final_category_name).unwrap();
-            if existing.description == final_category_name
-                || (final_category_name.is_empty()
-                    && existing.description == format!("{}", variant_ident))
-            {
+            if existing.description == final_category_name {
                 categories.insert(
                     final_category_name.clone(),
                     CategoryInfo {

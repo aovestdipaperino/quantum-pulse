@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2025-10-08
+
+### Fixed
+- **Test Isolation** - Fixed race conditions in test suite
+  - Added `.cargo/config.toml` with `RUST_TEST_THREADS = "1"` to force serial test execution
+  - Tests now run reliably without flaky failures due to shared global state
+- **ProfileCollector State Management** - Fixed incomplete cleanup in `reset_all()`
+  - `ProfileCollector::reset_all()` now properly clears both `GLOBAL_STATS` and `GLOBAL_CATEGORIES`
+  - Ensures complete state reset between test runs
+- **ProfileOp Derive Macro** - Fixed category name generation for variants without attributes
+  - Variants without `#[category]` attribute now correctly use their variant name as the category name
+  - Previously, these variants incorrectly received empty string category names
+
 ## [0.1.8] - 2024-12-22
 
 ### Changed

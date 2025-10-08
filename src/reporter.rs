@@ -337,8 +337,8 @@ impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ProfileReport
 
         // Table header
         if self.config.include_percentiles {
-            output.push_str("  Operation                          |   Count |        Mean |         P50 |         P95 |         P99 |       P99.9\n");
-            output.push_str("  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────\n");
+            output.push_str("  Operation                          |   Count |        Mean |         P50 |         P95 |         P99 |       P99.9 |         Max\n");
+            output.push_str("  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n");
         } else {
             output.push_str(
                 "  Operation                          |   Count |        Mean |         Min |         Max\n",
@@ -360,7 +360,7 @@ impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ProfileReport
 
             if self.config.include_percentiles {
                 output.push_str(&format!(
-                    "{:<34} | {:>7} | {:>11} | {:>11} | {:>11} | {:>11} | {:>11}\n",
+                    "{:<34} | {:>7} | {:>11} | {:>11} | {:>11} | {:>11} | {:>11} | {:>11}\n",
                     format!("\"{}\"", name),
                     stats.count,
                     self.config
@@ -370,6 +370,7 @@ impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ProfileReport
                     self.config.time_format.format_time(stats.p95_micros()),
                     self.config.time_format.format_time(stats.p99_micros()),
                     self.config.time_format.format_time(stats.p999_micros()),
+                    self.config.time_format.format_time(stats.max_time_micros),
                 ));
             } else {
                 output.push_str(&format!(

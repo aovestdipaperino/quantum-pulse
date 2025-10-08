@@ -264,6 +264,9 @@ impl ProfileCollector {
             if let Ok(mut stats) = GLOBAL_STATS.write() {
                 stats.clear();
             }
+            if let Ok(mut categories) = GLOBAL_CATEGORIES.write() {
+                categories.clear();
+            }
         }
     }
 

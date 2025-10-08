@@ -1,6 +1,6 @@
 [package]
 name = "quantum-pulse"
-version = "0.1.10"
+version = "0.1.11"
 edition = "2021"
 authors = ["Enzo Lombardi <enzinol@gmail.com>"]
 description = "A lightweight, customizable profiling library for Rust with support for custom categories and percentile statistics"
@@ -22,7 +22,7 @@ include = [
 
 [dependencies]
 hdrhistogram = { version = "7.5", optional = true }
-quantum-pulse-macros = { version = "0.1.10", path = "quantum-pulse-macros" }
+quantum-pulse-macros = { version = "0.1.11", path = "quantum-pulse-macros" }
 
 [features]
 default = []
