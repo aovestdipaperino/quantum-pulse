@@ -3,10 +3,64 @@
 //! Provides RAII-based timers for measuring operation durations.
 //! Timers automatically record their duration when dropped.
 
+use std::cell::RefCell;
 use std::time::Instant;
 
 use crate::collector::ProfileCollector;
 use crate::operation::Operation;
+
+thread_local! {
+    /// Thread-local stack of timers, storing unique IDs
+    static TIMER_STACK: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+
+    /// Thread-local set of paused timer IDs (for stack-based pausing)
+    static PAUSED_TIMERS: RefCell<std::collections::HashSet<usize>> = RefCell::new(std::collections::HashSet::new());
+}
+
+/// Global counter for generating unique timer IDs
+static TIMER_ID_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Pause all timers currently on the call stack for this thread
+///
+/// This only affects timers that are currently active (not yet dropped).
+/// Timers created after this call will not be paused unless they are on the stack
+/// when pause_stack is called again.
+pub fn pause_stack() {
+    TIMER_STACK.with(|stack| {
+        PAUSED_TIMERS.with(|paused| {
+            let stack_ids = stack.borrow();
+            let mut paused_set = paused.borrow_mut();
+
+            // Mark all timers currently on the stack as paused
+            for &timer_id in stack_ids.iter() {
+                paused_set.insert(timer_id);
+            }
+        });
+    });
+}
+
+/// Resume all timers that were paused by pause_stack on this thread
+///
+/// This removes timers from the paused set based on the current stack.
+/// Only timers currently on the stack will be resumed.
+pub fn unpause_stack() {
+    TIMER_STACK.with(|stack| {
+        PAUSED_TIMERS.with(|paused| {
+            let stack_ids = stack.borrow();
+            let mut paused_set = paused.borrow_mut();
+
+            // Remove timers currently on the stack from the paused set
+            for &timer_id in stack_ids.iter() {
+                paused_set.remove(&timer_id);
+            }
+        });
+    });
+}
+
+/// Check if a specific timer is paused (by timer ID)
+pub(crate) fn is_timer_paused(timer_id: usize) -> bool {
+    PAUSED_TIMERS.with(|paused| paused.borrow().contains(&timer_id))
+}
 
 /// A timer that automatically records duration when dropped
 ///
@@ -42,6 +96,10 @@ pub struct ProfileTimer<'a> {
     operation: &'a dyn Operation,
     start_time: Instant,
     recorded: bool,
+    /// Unique ID for this timer instance
+    id: usize,
+    /// Whether this timer is individually paused (for stack-based pausing)
+    individually_paused: bool,
 }
 
 impl<'a> ProfileTimer<'a> {
@@ -50,10 +108,19 @@ impl<'a> ProfileTimer<'a> {
     /// The timer will start immediately and record its duration
     /// when it goes out of scope.
     pub fn new(operation: &'a dyn Operation) -> Self {
+        let id = TIMER_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Register this timer on the stack
+        TIMER_STACK.with(|stack| {
+            stack.borrow_mut().push(id);
+        });
+
         Self {
             operation,
             start_time: Instant::now(),
             recorded: false,
+            id,
+            individually_paused: false,
         }
     }
 
@@ -79,12 +146,38 @@ impl<'a> ProfileTimer<'a> {
 
     /// Manually record the timer (usually done automatically on drop)
     pub fn record(&mut self) {
-        if !self.recorded {
+        // Check both individual pause state and if this timer ID is in the paused set
+        let is_paused = self.individually_paused || is_timer_paused(self.id);
+
+        if !self.recorded && !is_paused {
             let category_name = self.operation.get_category().get_name();
             let key = format!("{}::{}", category_name, self.operation.to_str());
             ProfileCollector::record(&key, self.elapsed_micros());
             self.recorded = true;
+        } else if is_paused {
+            // Mark as recorded so we don't try again
+            self.recorded = true;
         }
+    }
+
+    /// Check if this timer is individually paused (for stack-based pausing)
+    pub fn is_individually_paused(&self) -> bool {
+        self.individually_paused || is_timer_paused(self.id)
+    }
+
+    /// Pause this specific timer (internal use for stack-based pausing)
+    pub(crate) fn pause_individual(&mut self) {
+        self.individually_paused = true;
+    }
+
+    /// Resume this specific timer (internal use for stack-based pausing)
+    pub(crate) fn resume_individual(&mut self) {
+        self.individually_paused = false;
+    }
+
+    /// Get the unique ID of this timer
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     /// Stop the timer and return the elapsed duration without recording
@@ -106,9 +199,20 @@ impl<'a> ProfileTimer<'a> {
 
 impl<'a> Drop for ProfileTimer<'a> {
     fn drop(&mut self) {
+        // Unregister from stack
+        TIMER_STACK.with(|stack| {
+            stack.borrow_mut().retain(|&timer_id| timer_id != self.id);
+        });
+
+        // Record first (which will check if we're paused)
         if !self.recorded {
             self.record();
         }
+
+        // Then remove from paused set
+        PAUSED_TIMERS.with(|paused| {
+            paused.borrow_mut().remove(&self.id);
+        });
     }
 }
 
@@ -229,26 +333,48 @@ pub struct PausableTimer<'a> {
     total_duration: std::time::Duration,
     start_time: Option<Instant>,
     recorded: bool,
+    /// Unique ID for this timer instance
+    id: usize,
+    /// Whether this timer is individually paused (for stack-based pausing)
+    individually_paused: bool,
 }
 
 impl<'a> PausableTimer<'a> {
     /// Create a new pausable timer
     pub fn new(operation: &'a dyn Operation) -> Self {
+        let id = TIMER_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Register this timer on the stack
+        TIMER_STACK.with(|stack| {
+            stack.borrow_mut().push(id);
+        });
+
         Self {
             operation,
             total_duration: std::time::Duration::ZERO,
             start_time: Some(Instant::now()),
             recorded: false,
+            id,
+            individually_paused: false,
         }
     }
 
     /// Create a new pausable timer that starts paused
     pub fn new_paused(operation: &'a dyn Operation) -> Self {
+        let id = TIMER_ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Register this timer on the stack
+        TIMER_STACK.with(|stack| {
+            stack.borrow_mut().push(id);
+        });
+
         Self {
             operation,
             total_duration: std::time::Duration::ZERO,
             start_time: None,
             recorded: false,
+            id,
+            individually_paused: false,
         }
     }
 
@@ -301,7 +427,10 @@ impl<'a> PausableTimer<'a> {
 
     /// Record the current total duration
     pub fn record(&mut self) {
-        if !self.recorded {
+        // Check both individual pause state and if this timer ID is in the paused set
+        let is_paused = self.individually_paused || is_timer_paused(self.id);
+
+        if !self.recorded && !is_paused {
             let key = format!(
                 "{}::{}",
                 self.operation.get_category().get_name(),
@@ -309,7 +438,30 @@ impl<'a> PausableTimer<'a> {
             );
             ProfileCollector::record(&key, self.total_elapsed_micros());
             self.recorded = true;
+        } else if is_paused {
+            // Mark as recorded so we don't try again
+            self.recorded = true;
         }
+    }
+
+    /// Check if this timer is individually paused (for stack-based pausing)
+    pub fn is_individually_paused(&self) -> bool {
+        self.individually_paused || is_timer_paused(self.id)
+    }
+
+    /// Pause this specific timer (internal use for stack-based pausing)
+    pub(crate) fn pause_individual(&mut self) {
+        self.individually_paused = true;
+    }
+
+    /// Resume this specific timer (internal use for stack-based pausing)
+    pub(crate) fn resume_individual(&mut self) {
+        self.individually_paused = false;
+    }
+
+    /// Get the unique ID of this timer
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     /// Stop the timer and return the total elapsed duration without recording
@@ -345,9 +497,20 @@ impl<'a> PausableTimer<'a> {
 
 impl<'a> Drop for PausableTimer<'a> {
     fn drop(&mut self) {
+        // Unregister from stack
+        TIMER_STACK.with(|stack| {
+            stack.borrow_mut().retain(|&timer_id| timer_id != self.id);
+        });
+
+        // Record first (which will check if we're paused)
         if !self.recorded {
             self.record();
         }
+
+        // Then remove from paused set
+        PAUSED_TIMERS.with(|paused| {
+            paused.borrow_mut().remove(&self.id);
+        });
     }
 }
 

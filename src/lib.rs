@@ -420,6 +420,12 @@ pub mod timer {
     impl<'a> Drop for PausableTimer<'a> {
         fn drop(&mut self) {}
     }
+
+    /// Pause all timers currently on the call stack for this thread (stub)
+    pub fn pause_stack() {}
+
+    /// Resume all timers that were paused by pause_stack on this thread (stub)
+    pub fn unpause_stack() {}
 }
 
 // Re-export the appropriate implementations based on feature flags
@@ -431,6 +437,15 @@ pub use collector::{OperationStats, ProfileCollector, SummaryStats};
 pub use operation::Operation;
 #[doc(inline)]
 pub use timer::{PausableTimer, ProfileTimer, ProfileTimerAsync};
+
+// Re-export stack-based pause/unpause functions
+#[cfg(feature = "full")]
+#[doc(inline)]
+pub use timer::{pause_stack, unpause_stack};
+
+#[cfg(not(feature = "full"))]
+#[doc(inline)]
+pub use timer::{pause_stack, unpause_stack};
 
 // Re-export reporter functionality when full feature is enabled
 #[cfg(feature = "full")]
@@ -637,6 +652,94 @@ macro_rules! pause {
 macro_rules! unpause {
     () => {
         $crate::ProfileCollector::unpause();
+    };
+}
+
+/// Pause only the timers currently on the call stack
+///
+/// Unlike `pause!()` which pauses all profiling globally, `pause_stack!()`
+/// only affects timers that are currently active (created but not yet dropped).
+/// New timers created after this call will still be recorded normally.
+///
+/// This is useful when you want to exclude specific nested operations from
+/// profiling without affecting other concurrent operations.
+///
+/// # Example
+/// ```rust
+/// use quantum_pulse::{profile, pause_stack, unpause_stack, Operation};
+/// use std::fmt::Debug;
+///
+/// #[derive(Debug)]
+/// enum AppOperation {
+///     OuterWork,
+///     InnerWork,
+/// }
+///
+/// impl Operation for AppOperation {}
+///
+/// # fn do_outer_work() {}
+/// # fn do_excluded_work() {}
+/// # fn do_inner_work() {}
+///
+/// profile!(AppOperation::OuterWork, {
+///     do_outer_work();
+///
+///     // Pause only the OuterWork timer
+///     pause_stack!();
+///
+///     // This work won't be included in OuterWork's time
+///     do_excluded_work();
+///
+///     // But this new timer will still be recorded
+///     profile!(AppOperation::InnerWork, {
+///         do_inner_work();
+///     });
+///
+///     // Resume the OuterWork timer
+///     unpause_stack!();
+///
+///     do_outer_work();
+/// });
+/// ```
+#[macro_export]
+macro_rules! pause_stack {
+    () => {
+        $crate::pause_stack();
+    };
+}
+
+/// Resume timers that were paused by `pause_stack!()`
+///
+/// This clears the set of paused timers on the current thread, allowing
+/// previously paused timers to record again.
+///
+/// # Example
+/// ```rust
+/// use quantum_pulse::{profile, pause_stack, unpause_stack, Operation};
+/// use std::fmt::Debug;
+///
+/// #[derive(Debug)]
+/// enum AppOperation {
+///     Work,
+/// }
+///
+/// impl Operation for AppOperation {}
+///
+/// # fn do_work() {}
+/// # fn do_excluded_work() {}
+///
+/// profile!(AppOperation::Work, {
+///     do_work();
+///     pause_stack!();
+///     do_excluded_work();
+///     unpause_stack!();
+///     do_work();
+/// });
+/// ```
+#[macro_export]
+macro_rules! unpause_stack {
+    () => {
+        $crate::unpause_stack();
     };
 }
 

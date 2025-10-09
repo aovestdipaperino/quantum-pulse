@@ -1,0 +1,12 @@
+# Cargo configuration for quantum-pulse
+#
+# Tests must run serially because they share global state (ProfileCollector).
+# Running tests in parallel causes race conditions and flaky failures.
+
+[alias]
+# Alias for running tests serially (required due to shared global state)
+test-serial = "test -- --test-threads=1"
+
+[env]
+# Force tests to run serially by default
+RUST_TEST_THREADS = "1"

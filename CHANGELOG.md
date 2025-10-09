@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2025-10-09
+
+### Added
+- **Stack-Based Pause/Unpause** - Fine-grained profiling control for timers on the call stack
+  - `pause_stack!()` macro to pause only timers currently active on the call stack
+  - `unpause_stack!()` macro to resume timers that were paused by `pause_stack!()`
+  - Thread-local timer tracking with unique IDs for each timer instance
+  - Thread-local pause set for tracking which timers are paused
+  - Automatic cleanup of timer IDs from stack and pause set on drop
+  - Full stub implementations for zero-cost abstractions in default mode
+
+### Documentation
+- Added comprehensive example `examples/stack_pause.rs` demonstrating:
+  - Excluding I/O wait time from processing metrics
+  - Pausing nested timers
+  - Multiple pause/unpause cycles
+  - Conditional profiling based on runtime conditions
+- Added 6 integration tests covering all stack-based pause/unpause scenarios
+
+### How It Works
+- Each timer gets a unique ID and registers on a thread-local stack when created
+- `pause_stack!()` marks all timer IDs currently on the stack as paused
+- Paused timers don't record metrics when they drop
+- `unpause_stack!()` removes currently active timers from the paused set
+- Timers can be paused without being resumed (won't record)
+- New timers created after `pause_stack!()` are not affected
+
+### Use Cases
+- Exclude I/O wait time from algorithm profiling
+- Measure only CPU-bound work in mixed operations
+- Exclude network latency from processing metrics
+- Conditional profiling based on runtime conditions
+- Fine-grained control without affecting concurrent operations
+
 ## [0.1.11] - 2025-10-08
 
 ### Fixed

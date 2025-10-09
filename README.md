@@ -349,12 +349,62 @@ profile!(AppOperation::CriticalWork, {
 });
 ```
 
+### Stack-Based Pause/Unpause
+
+For fine-grained control, pause only timers currently on the call stack with `pause_stack!()` and `unpause_stack!()`:
+
+```rust
+use quantum_pulse::{profile, pause_stack, unpause_stack, ProfileOp};
+
+#[derive(Debug, ProfileOp)]
+enum AppOperation {
+    #[category(name = "Processing")]
+    DataProcessing,
+    
+    #[category(name = "IO")]
+    DatabaseQuery,
+}
+
+// Profile data processing, but exclude I/O wait time
+profile!(AppOperation::DataProcessing, {
+    // Initial processing (measured)
+    process_data();
+    
+    // Pause only the DataProcessing timer
+    pause_stack!();
+    
+    // Database query (not counted in DataProcessing time)
+    // But the query itself is still profiled separately
+    profile!(AppOperation::DatabaseQuery, {
+        query_database();
+    });
+    
+    // Resume the DataProcessing timer
+    unpause_stack!();
+    
+    // More processing (measured)
+    finalize_data();
+});
+```
+
+**Key differences:**
+- `pause!()` / `unpause!()` - Affects **all** profiling globally
+- `pause_stack!()` / `unpause_stack!()` - Affects **only timers currently on the call stack**
+
 ### Use Cases
 
-- **Exclude initialization/cleanup** from performance measurements
-- **Focus profiling on specific sections** during debugging
-- **Reduce overhead** during non-critical operations
-- **Selective measurement** in loops or batch operations
+**Global Pause/Unpause:**
+- Exclude initialization/cleanup from performance measurements
+- Focus profiling on specific sections during debugging
+- Reduce overhead during non-critical operations
+- Selective measurement in loops or batch operations
+
+**Stack-Based Pause/Unpause:**
+- Exclude I/O wait time from algorithm profiling
+- Measure only CPU-bound work in mixed operations
+- Exclude network latency from processing metrics
+- Fine-grained control without affecting concurrent operations
+- Conditional profiling based on runtime conditions
 
 ## Migration Guide
 

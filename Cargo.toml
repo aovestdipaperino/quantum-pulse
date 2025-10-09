@@ -1,6 +1,6 @@
 [package]
 name = "quantum-pulse"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2021"
 authors = ["Enzo Lombardi <enzinol@gmail.com>"]
 description = "A lightweight, customizable profiling library for Rust with support for custom categories and percentile statistics"
