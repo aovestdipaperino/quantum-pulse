@@ -337,11 +337,11 @@ impl<C: Category + Clone + std::fmt::Debug + Eq + std::hash::Hash> ProfileReport
 
         // Table header
         if self.config.include_percentiles {
-            output.push_str("  Operation                          |   Count |        Mean |         P50 |         P95 |         P99 |       P99.9 |         Max\n");
+            output.push_str("Operation                          |   Count |        Mean |         P50 |         P95 |         P99 |       P99.9 |         Max\n");
             output.push_str("  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n");
         } else {
             output.push_str(
-                "  Operation                          |   Count |        Mean |         Min |         Max\n",
+                "Operation                          |   Count |        Mean |         Min |         Max\n",
             );
             output.push_str(
                 "  ─────────────────────────────────────────────────────────────────────────────────────────\n",
