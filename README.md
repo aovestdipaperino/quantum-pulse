@@ -1,5 +1,7 @@
 # Quantum Pulse
 
+[![GitHub stars](https://img.shields.io/github/stars/aovestdipaperino/quantum-pulse?logo=github&color=brightgreen)](https://github.com/aovestdipaperino/quantum-pulse/stargazers)
+
 <p align="center">
   <a href="https://ai.enzolombardi.net/"><img src="https://img.shields.io/badge/built%20with-AI-D97757?style=flat-square&labelColor=101010&logo=anthropic&logoColor=white" alt="Built with AI — part of Enzo Lombardi's AI portfolio"></a>
 </p>
